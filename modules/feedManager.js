@@ -56,6 +56,8 @@ export const feedManager = {
         this.isPreloading = true;
         this.targetPreloadIndex = Math.max(this.targetPreloadIndex || 0, currentIndex + CONFIG.FEED_BUFFER_SIZE);
 
+        const fetchTasks = [];
+
         while (this.cardBuffer.length < this.targetPreloadIndex) {
             const i = this.cardBuffer.length;
 
@@ -74,41 +76,49 @@ export const feedManager = {
                 this.renderLoadingCard(i);
             }
 
-            let success = false;
-            let attempt = 0;
-            while (!success) {
-                try {
-                    const data = await this.fetchCallback();
-                    if (data && data.videoId && data.album) {
-                        success = true;
-                        // Clean up loading UI if present, then render
-                        if (this.cardBuffer[i].domElement) {
-                            this.cardBuffer[i].domElement.remove();
-                        }
-                        this.renderCard(i, data.album, data.videoId);
+            // Launch fetch task concurrently instead of awaiting sequentially
+            fetchTasks.push((async (index) => {
+                let success = false;
+                let attempt = 0;
+                while (!success) {
+                    try {
+                        const data = await this.fetchCallback();
+                        if (data && data.videoId && data.album) {
+                            success = true;
+                            // Clean up loading UI if present, then render
+                            if (this.cardBuffer[index].domElement) {
+                                this.cardBuffer[index].domElement.remove();
+                            }
+                            this.renderCard(index, data.album, data.videoId);
 
-                        // Let the system breathe to avoid API limits (Discogs limit is ~60 req/min)
-                        await new Promise(resolve => setTimeout(resolve, 400));
-                    } else {
-                        // Data valid but no YouTube video (edge case), try again immediately
-                        console.warn("Got album but no YouTube video, retrying silently...");
-                        await new Promise(resolve => setTimeout(resolve, 500));
+                            // Let the system breathe to avoid API limits (Discogs limit is ~60 req/min)
+                            await new Promise(resolve => setTimeout(resolve, 400));
+                        } else {
+                            // Data valid but no YouTube video (edge case), try again immediately
+                            console.warn("Got album but no YouTube video, retrying silently...");
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                    } catch (err) {
+                        if (err.code === 'ZERO_RESULTS') {
+                            document.dispatchEvent(new CustomEvent('zeroResults'));
+                            this.isPreloading = false;
+                            return; // Stop the feed preloading entirely
+                        }
+                        attempt++;
+                        console.error(`Fetch failed for card, retrying silently (attempt ${attempt})`, err);
+                        // Exponential backoff before retrying on hard error
+                        const backoff = Math.min(1000 * Math.pow(1.5, attempt), 10000);
+                        await new Promise(resolve => setTimeout(resolve, backoff));
                     }
-                } catch (err) {
-                    if (err.code === 'ZERO_RESULTS') {
-                        document.dispatchEvent(new CustomEvent('zeroResults'));
-                        this.isPreloading = false;
-                        return; // Stop the feed preloading entirely
-                    }
-                    attempt++;
-                    console.error(`Fetch failed for card, retrying silently (attempt ${attempt})`, err);
-                    // Exponential backoff before retrying on hard error
-                    const backoff = Math.min(1000 * Math.pow(1.5, attempt), 10000);
-                    await new Promise(resolve => setTimeout(resolve, backoff));
                 }
-            }
+            })(i));
+
+            // Stagger parallel requests very slightly to prevent hitting 429 rate limit exactly at the same millisecond
+            await new Promise(resolve => setTimeout(resolve, 200));
         }
 
+        // Wait for all concurrent fetch tasks to finish before releasing the overall lock
+        await Promise.allSettled(fetchTasks);
         this.isPreloading = false;
     },
 
