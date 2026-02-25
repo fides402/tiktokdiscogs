@@ -2,6 +2,7 @@ import { CONFIG } from '../config.js';
 
 const totalPagesCache = {};
 const pendingPageProbes = {};
+const criteriaReleasePools = {}; // Caches up to 100 releases per criteria!
 const seenReleases = new Set();
 let lastDiscogsCall = 0;
 
@@ -39,10 +40,17 @@ export const discogsService = {
             'User-Agent': "AntiGravityApp/1.0"
         };
 
+        const criteriaKey = JSON.stringify(criteria);
+
+        // Serve from memory pool immediately if we have cached releases
+        if (criteriaReleasePools[criteriaKey] && criteriaReleasePools[criteriaKey].length > 0) {
+            const randomReleaseSummary = criteriaReleasePools[criteriaKey].pop();
+            return this.formatReleaseSummary(randomReleaseSummary, criteria, fetchDetails);
+        }
+
         const maxRetries = 2;
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             try {
-                const criteriaKey = JSON.stringify(criteria);
                 let totalPages = totalPagesCache[criteriaKey];
                 let data = null;
 
@@ -115,43 +123,26 @@ export const discogsService = {
                     unseenResults = data.results;
                 }
 
-                // Pick a random release from the results page
-                const randomReleaseSummary = unseenResults[Math.floor(Math.random() * unseenResults.length)];
-
-                // Add to seen Set
-                seenReleases.add(randomReleaseSummary.id);
-                // Keep set size manageable
-                if (seenReleases.size > 500) {
-                    const iterator = seenReleases.values();
-                    seenReleases.delete(iterator.next().value); // Remove oldest
+                // Shuffle the unseen results to ensure randomness in the pool
+                for (let i = unseenResults.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [unseenResults[i], unseenResults[j]] = [unseenResults[j], unseenResults[i]];
                 }
 
-                // Return simplified metadata immediately if details aren't requested
-                if (!fetchDetails) {
-                    // Title in search results is usually "Artist - Title"
-                    let artist = "Unknown Artist";
-                    let title = randomReleaseSummary.title || "Unknown Title";
-
-                    if (randomReleaseSummary.title && randomReleaseSummary.title.includes(' - ')) {
-                        const parts = randomReleaseSummary.title.split(' - ');
-                        artist = parts[0].trim();
-                        title = parts.slice(1).join(' - ').trim();
+                // Add all fetched releases to the seen Set immediately
+                unseenResults.forEach(r => {
+                    seenReleases.add(r.id);
+                    if (seenReleases.size > 2000) {
+                        const iterator = seenReleases.values();
+                        seenReleases.delete(iterator.next().value); // Remove oldest
                     }
+                });
 
-                    return {
-                        id: randomReleaseSummary.id,
-                        artist: artist,
-                        title: title,
-                        year: randomReleaseSummary.year || criteria.year || "Unknown Year",
-                        genres: randomReleaseSummary.style || randomReleaseSummary.genre || [criteria.genre || 'Mixed'],
-                        cover: randomReleaseSummary.cover_image || randomReleaseSummary.thumb || "",
-                        youtubeVideoIds: [], // We don't have these without details
-                        youtubePlaylistId: null
-                    };
-                }
+                // Pick one release to return now, put the rest in the pool
+                const randomReleaseSummary = unseenResults.pop();
+                criteriaReleasePools[criteriaKey] = unseenResults;
 
-                // Fetch full release details only if explicitly asked
-                return await this.fetchReleaseDetails(randomReleaseSummary.id, criteria.genre || 'Mixed');
+                return this.formatReleaseSummary(randomReleaseSummary, criteria, fetchDetails);
 
             } catch (error) {
                 if (attempt === maxRetries) {
