@@ -1,5 +1,7 @@
 export const videoPlayer = {
     async createPlayer(cardElement, videoId) {
+        if (!videoId) return null;
+
         // Ensure YT API is ready
         if (typeof window.YT === 'undefined' || typeof window.YT.Player === 'undefined') {
             console.warn("YouTube API not ready yet");

@@ -163,6 +163,35 @@ export const discogsService = {
         }
     },
 
+    async formatReleaseSummary(randomReleaseSummary, criteria, fetchDetails) {
+        // Return simplified metadata immediately if details aren't requested
+        if (!fetchDetails) {
+            // Title in search results is usually "Artist - Title"
+            let artist = "Unknown Artist";
+            let title = randomReleaseSummary.title || "Unknown Title";
+
+            if (randomReleaseSummary.title && randomReleaseSummary.title.includes(' - ')) {
+                const parts = randomReleaseSummary.title.split(' - ');
+                artist = parts[0].trim();
+                title = parts.slice(1).join(' - ').trim();
+            }
+
+            return {
+                id: randomReleaseSummary.id,
+                artist: artist,
+                title: title,
+                year: randomReleaseSummary.year || criteria.year || "Unknown Year",
+                genres: randomReleaseSummary.style || randomReleaseSummary.genre || [criteria.genre || 'Mixed'],
+                cover: randomReleaseSummary.cover_image || randomReleaseSummary.thumb || "",
+                youtubeVideoIds: [], // We don't have these without details
+                youtubePlaylistId: null
+            };
+        }
+
+        // Fetch full release details only if explicitly asked
+        return await this.fetchReleaseDetails(randomReleaseSummary.id, criteria.genre || 'Mixed');
+    },
+
     async fetchReleaseDetails(releaseId, categoryId) {
         const detailsUrl = `${CONFIG.DISCOGS_BASE_URL}/releases/${releaseId}`;
         const headers = {

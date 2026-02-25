@@ -60,22 +60,25 @@ export const dataBuffer = {
                     let videoId = await youtubeService.searchVideo(album.artist, album.title, album.youtubeVideoIds);
 
                     if (!videoId && !album.youtubePlaylistId && (!album.youtubeVideoIds || album.youtubeVideoIds.length === 0)) {
-                        const fetchedPlaylistId = await youtubeService.searchPlaylist(album.artist, album.title);
-                        if (fetchedPlaylistId) {
-                            album.youtubePlaylistId = fetchedPlaylistId;
-                            // For simplicity in this architecture, if it's a playlist we still need a videoId to start the player
-                            // We rely on the searchVideo actually having failed, but maybe the playlist search worked.
-                            // The actual player logic handles playlist playback if `list` is passed, but it usually needs a generic ID.
-                            // If we don't have a video ID at all, we'll assign a placeholder or skip for now to maintain fluidity
+                        try {
+                            const fetchedPlaylistId = await youtubeService.searchPlaylist(album.artist, album.title);
+                            if (fetchedPlaylistId) {
+                                album.youtubePlaylistId = fetchedPlaylistId;
+                            }
+                        } catch (e) {
+                            console.warn("YouTube playlist search failed", e);
                         }
                     }
 
-                    // Even if no videoId, pass it so feedManager can handle the gap silently
+                    // Push valid or empty video to keep feed alive
                     this.readyQueue.push({ album, videoId });
                 } catch (err) {
                     console.error("YouTube pipeline error:", err);
+                    // Push the album anyway to prevent feed from hanging endlessly
+                    this.readyQueue.push({ album, videoId: null });
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
+
             } else {
                 // Buffer full or no albums ready, rest
                 await new Promise(resolve => setTimeout(resolve, 100));
