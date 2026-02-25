@@ -1,5 +1,8 @@
 import { CONFIG } from '../config.js';
 
+const totalPagesCache = {};
+const seenReleases = new Set();
+
 export const discogsService = {
     async fetchRandomRelease(criteria) {
         if (!criteria) {
@@ -26,37 +29,44 @@ export const discogsService = {
         const maxRetries = 2;
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             try {
-                // Step 1: Probe for total pages to ensure we don't request out of bounds
-                const initialSearchUrl = `${CONFIG.DISCOGS_BASE_URL}/database/search?${params.toString()}`;
+                const criteriaKey = JSON.stringify(criteria);
+                let totalPages = totalPagesCache[criteriaKey];
+                let data = null;
 
-                let response = await fetch(initialSearchUrl, { headers });
-                if (!response.ok) {
-                    throw new Error(`Discogs API Error: ${response.status}`);
-                }
-
-                let data = await response.json();
-
-                if (!data.results || data.results.length === 0) {
-                    const error = new Error("No results for criteria");
-                    error.code = 'ZERO_RESULTS';
-                    throw error; // Fail immediately, retrying won't invent new albums
-                }
-
-                // Step 2: Now that we know total pages (max 200 by Discogs search limits)
-                // Pick a random page within the actual bounds
-                const totalPages = Math.min(data.pagination.pages, 200); // hard cap at 200 to be safe
-                const randomPage = Math.floor(Math.random() * totalPages) + 1;
-
-                if (randomPage > 1) {
-                    params.set("page", randomPage);
-                    const randomSearchUrl = `${CONFIG.DISCOGS_BASE_URL}/database/search?${params.toString()}`;
-                    response = await fetch(randomSearchUrl, { headers });
+                if (!totalPages) {
+                    // Step 1: Probe for total pages to ensure we don't request out of bounds
+                    const initialSearchUrl = `${CONFIG.DISCOGS_BASE_URL}/database/search?${params.toString()}`;
+                    let response = await fetch(initialSearchUrl, { headers });
 
                     if (!response.ok) {
-                        if (response.status === 404) {
-                            // Fallback to page 1 data if our random page is stubbornly missing
-                            console.warn(`Page ${randomPage} not found, falling back to page 1`);
-                            // data is already from page 1
+                        if (response.status === 429) throw new Error('TOO_MANY_REQUESTS');
+                        throw new Error(`Discogs API Error: ${response.status}`);
+                    }
+
+                    data = await response.json();
+
+                    if (!data.results || data.results.length === 0) {
+                        const error = new Error("No results for criteria");
+                        error.code = 'ZERO_RESULTS';
+                        throw error;
+                    }
+
+                    totalPages = Math.min(data.pagination.pages, 200);
+                    totalPagesCache[criteriaKey] = totalPages;
+                }
+
+                // Step 2: Pick a random page within the actual bounds
+                const randomPage = Math.floor(Math.random() * totalPages) + 1;
+
+                if (randomPage > 1 || !data) {
+                    params.set("page", randomPage);
+                    const randomSearchUrl = `${CONFIG.DISCOGS_BASE_URL}/database/search?${params.toString()}`;
+                    let response = await fetch(randomSearchUrl, { headers });
+
+                    if (!response.ok) {
+                        if (response.status === 404 && data) {
+                            // Fallback to cached data if possible
+                            console.warn(`Page ${randomPage} not found, falling back to data`);
                         } else if (response.status === 429) {
                             throw new Error('TOO_MANY_REQUESTS');
                         } else {
@@ -72,8 +82,24 @@ export const discogsService = {
                     throw new Error("No results found on chosen page");
                 }
 
+                // Filter out recently seen releases
+                let unseenResults = data.results.filter(r => !seenReleases.has(r.id));
+
+                // If by some extreme chance all 50 items on this page were seen, fallback to any
+                if (unseenResults.length === 0) {
+                    unseenResults = data.results;
+                }
+
                 // Pick a random release from the results page
-                const randomReleaseSummary = data.results[Math.floor(Math.random() * data.results.length)];
+                const randomReleaseSummary = unseenResults[Math.floor(Math.random() * unseenResults.length)];
+
+                // Add to seen Set
+                seenReleases.add(randomReleaseSummary.id);
+                // Keep set size manageable
+                if (seenReleases.size > 500) {
+                    const iterator = seenReleases.values();
+                    seenReleases.delete(iterator.next().value); // Remove oldest
+                }
 
                 // Fetch full release details
                 return await this.fetchReleaseDetails(randomReleaseSummary.id, criteria.genre || 'Mixed');
