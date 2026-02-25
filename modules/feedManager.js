@@ -9,11 +9,13 @@ export const feedManager = {
     fetchCallback: null,
     observer: null,
     isNavigating: false,
+    isPreloading: false,
 
     init(feedContainerElement, fetchCardDataCallback) {
         this.container = feedContainerElement;
         this.fetchCallback = fetchCardDataCallback;
         this.currentIndex = 0;
+        this.isPreloading = false;
 
         // Set up intersection observer to detect current card
         this.observer = new IntersectionObserver((entries) => {
@@ -45,6 +47,9 @@ export const feedManager = {
     },
 
     async preloadCards(fromIndex) {
+        if (this.isPreloading) return;
+        this.isPreloading = true;
+
         const toIndex = fromIndex + CONFIG.FEED_BUFFER_SIZE;
 
         for (let i = fromIndex; i < toIndex; i++) {
@@ -94,6 +99,8 @@ export const feedManager = {
                 }
             }
         }
+
+        this.isPreloading = false;
     },
 
     renderLoadingCard(index) {
