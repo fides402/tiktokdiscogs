@@ -56,7 +56,9 @@ export const feedManager = {
         this.isPreloading = true;
         this.targetPreloadIndex = Math.max(this.targetPreloadIndex || 0, currentIndex + CONFIG.FEED_BUFFER_SIZE);
 
-        const fetchTasks = [];
+        // Remove fetchTasks and Promise.allSettled entirely.
+        // We just let the while loop spawn promises and we immediately release the lock.
+        // This means the background tasks manage themselves.
 
         while (this.cardBuffer.length < this.targetPreloadIndex) {
             const i = this.cardBuffer.length;
@@ -76,8 +78,8 @@ export const feedManager = {
                 this.renderLoadingCard(i);
             }
 
-            // Launch fetch task concurrently instead of awaiting sequentially
-            fetchTasks.push((async (index) => {
+            // Launch fetch task concurrently and let it run free
+            (async (index) => {
                 let success = false;
                 let attempt = 0;
                 while (!success) {
@@ -101,7 +103,6 @@ export const feedManager = {
                     } catch (err) {
                         if (err.code === 'ZERO_RESULTS') {
                             document.dispatchEvent(new CustomEvent('zeroResults'));
-                            this.isPreloading = false;
                             return; // Stop the feed preloading entirely
                         }
                         attempt++;
@@ -111,14 +112,13 @@ export const feedManager = {
                         await new Promise(resolve => setTimeout(resolve, backoff));
                     }
                 }
-            })(i));
+            })(i);
 
-            // Stagger parallel requests very slightly to prevent hitting 429 rate limit exactly at the same millisecond
+            // Stagger parallel request startups very slightly to prevent hitting 429 rate limit exactly at the same millisecond
             await new Promise(resolve => setTimeout(resolve, 200));
         }
 
-        // Wait for all concurrent fetch tasks to finish before releasing the overall lock
-        await Promise.allSettled(fetchTasks);
+        // Immediately release lock so further scrolling can spawn MORE workers if needed
         this.isPreloading = false;
     },
 
