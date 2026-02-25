@@ -20,14 +20,14 @@ export const feedManager = {
         // Set up intersection observer to detect current card
         this.observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
-                if (entry.isIntersecting && entry.intersectionRatio > 0.8) {
+                if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
                     const index = parseInt(entry.target.dataset.index, 10);
                     this.handleCardVisible(index);
                 }
             });
         }, {
             root: this.container,
-            threshold: [0.8]
+            threshold: [0.5]
         });
 
         // Keyboard navigation
@@ -46,71 +46,70 @@ export const feedManager = {
         this.preloadCards(0);
     },
 
-    async preloadCards(fromIndex) {
-        if (this.isPreloading) return;
+    async preloadCards(currentIndex) {
+        if (this.isPreloading) {
+            // If already preloading, just update the target index and let the existing loop handle it
+            this.targetPreloadIndex = Math.max(this.targetPreloadIndex, currentIndex + CONFIG.FEED_BUFFER_SIZE);
+            return;
+        }
+
         this.isPreloading = true;
+        this.targetPreloadIndex = Math.max(this.targetPreloadIndex, currentIndex + CONFIG.FEED_BUFFER_SIZE);
 
-        const toIndex = fromIndex + CONFIG.FEED_BUFFER_SIZE;
+        while (this.cardBuffer.length < this.targetPreloadIndex) {
+            const i = this.cardBuffer.length;
 
-        for (let i = fromIndex; i < toIndex; i++) {
-            if (!this.cardBuffer[i]) {
-                // Initialize slot as loading
-                this.cardBuffer[i] = {
-                    index: i,
-                    state: 'loading',
-                    domElement: null,
-                    playerInstance: null,
-                    album: null,
-                    videoId: null
-                };
+            // Initialize slot as loading
+            this.cardBuffer.push({
+                index: i,
+                state: 'loading',
+                album: null,
+                videoId: null,
+                domElement: null,
+                playerInstance: null
+            });
 
-                // Show loading spinner immediately if it's the current active card
-                if (i === this.currentIndex) {
-                    this.renderLoadingCard(i);
-                }
+            // Show loading spinner immediately if it's the current active card
+            if (i === this.currentIndex) {
+                this.renderLoadingCard(i);
+            }
 
-                let success = false;
-                let attempt = 0;
-                while (!success) {
-                    try {
-                        const data = await this.fetchCallback();
-                        if (data && data.videoId && data.album) {
-                            success = true;
-                            // Clean up loading UI if present, then render
-                            if (this.cardBuffer[i].domElement) {
-                                this.cardBuffer[i].domElement.remove();
-                            }
-                            this.renderCard(i, data.album, data.videoId);
-
-                            // Let the system breathe to avoid API limits (Discogs limit is ~60 req/min)
-                            await new Promise(resolve => setTimeout(resolve, 400));
-                        } else {
-                            // Data valid but no YouTube video (edge case), try again immediately
-                            console.warn("Got album but no YouTube video, retrying silently...");
-                            await new Promise(resolve => setTimeout(resolve, 500));
+            let success = false;
+            let attempt = 0;
+            while (!success) {
+                try {
+                    const data = await this.fetchCallback();
+                    if (data && data.videoId && data.album) {
+                        success = true;
+                        // Clean up loading UI if present, then render
+                        if (this.cardBuffer[i].domElement) {
+                            this.cardBuffer[i].domElement.remove();
                         }
-                    } catch (err) {
-                        if (err.code === 'ZERO_RESULTS') {
-                            document.dispatchEvent(new CustomEvent('zeroResults'));
-                            return; // Stop the feed preloading entirely
-                        }
-                        attempt++;
-                        console.error(`Fetch failed for card, retrying silently (attempt ${attempt})`, err);
-                        // Exponential backoff before retrying on hard error
-                        const backoff = Math.min(1000 * Math.pow(1.5, attempt), 10000);
-                        await new Promise(resolve => setTimeout(resolve, backoff));
+                        this.renderCard(i, data.album, data.videoId);
+
+                        // Let the system breathe to avoid API limits (Discogs limit is ~60 req/min)
+                        await new Promise(resolve => setTimeout(resolve, 400));
+                    } else {
+                        // Data valid but no YouTube video (edge case), try again immediately
+                        console.warn("Got album but no YouTube video, retrying silently...");
+                        await new Promise(resolve => setTimeout(resolve, 500));
                     }
+                } catch (err) {
+                    if (err.code === 'ZERO_RESULTS') {
+                        document.dispatchEvent(new CustomEvent('zeroResults'));
+                        this.isPreloading = false;
+                        return; // Stop the feed preloading entirely
+                    }
+                    attempt++;
+                    console.error(`Fetch failed for card, retrying silently (attempt ${attempt})`, err);
+                    // Exponential backoff before retrying on hard error
+                    const backoff = Math.min(1000 * Math.pow(1.5, attempt), 10000);
+                    await new Promise(resolve => setTimeout(resolve, backoff));
                 }
             }
         }
 
         this.isPreloading = false;
-
-        // If the user scrolled fast and reached the threshold while we were loading,
-        // we might have missed the trigger event. Check again and load more if needed!
-        if (this.currentIndex + 4 >= this.cardBuffer.length) {
-            this.preloadCards(this.cardBuffer.length);
-        }
     },
 
     renderLoadingCard(index) {
@@ -212,7 +211,7 @@ export const feedManager = {
         }
 
         if (index + 4 >= this.cardBuffer.length) {
-            this.preloadCards(this.cardBuffer.length);
+            this.preloadCards(this.currentIndex);
         }
     },
 
