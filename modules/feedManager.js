@@ -49,12 +49,12 @@ export const feedManager = {
     async preloadCards(currentIndex) {
         if (this.isPreloading) {
             // If already preloading, just update the target index and let the existing loop handle it
-            this.targetPreloadIndex = Math.max(this.targetPreloadIndex, currentIndex + CONFIG.FEED_BUFFER_SIZE);
+            this.targetPreloadIndex = Math.max(this.targetPreloadIndex || 0, currentIndex + CONFIG.FEED_BUFFER_SIZE);
             return;
         }
 
         this.isPreloading = true;
-        this.targetPreloadIndex = Math.max(this.targetPreloadIndex, currentIndex + CONFIG.FEED_BUFFER_SIZE);
+        this.targetPreloadIndex = Math.max(this.targetPreloadIndex || 0, currentIndex + CONFIG.FEED_BUFFER_SIZE);
 
         while (this.cardBuffer.length < this.targetPreloadIndex) {
             const i = this.cardBuffer.length;
