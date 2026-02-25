@@ -91,7 +91,7 @@ async function fetchNextCardData() {
         return { album, videoId };
     } catch (error) {
         console.error("Complete failure in fetchNextCardData", error);
-        showError("Errore nel recupero dati");
+        // We let feedManager handle the retry silently
         throw error;
     }
 }

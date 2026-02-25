@@ -168,20 +168,6 @@ export const feedManager = {
         }
     },
 
-    renderErrorCard(index) {
-        const card = this.cardBuffer[index];
-        card.state = 'error';
-
-        const el = document.createElement('div');
-        el.className = 'feed-card';
-        el.dataset.index = index;
-        el.innerHTML = `<div class="error-message">Impossibile caricare questo brano.<br>Scorri per continuare.</div>`;
-
-        card.domElement = el;
-        this.container.appendChild(el);
-        this.observer.observe(el);
-    },
-
     handleCardVisible(index) {
         if (this.currentIndex === index && !this.isNavigating) return;
 
