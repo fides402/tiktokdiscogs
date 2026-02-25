@@ -37,9 +37,9 @@ export const discogsService = {
                 let data = await response.json();
 
                 if (!data.results || data.results.length === 0) {
-                    if (attempt === maxRetries) throw new Error("No results for criteria");
-                    await new Promise(resolve => setTimeout(resolve, 1500));
-                    continue;
+                    const error = new Error("No results for criteria");
+                    error.code = 'ZERO_RESULTS';
+                    throw error; // Fail immediately, retrying won't invent new albums
                 }
 
                 // Step 2: Now that we know total pages (max 200 by Discogs search limits)

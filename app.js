@@ -50,6 +50,20 @@ function init() {
     document.addEventListener('videoEnded', () => {
         feedManager.navigateTo(feedManager.currentIndex + 1);
     });
+
+    document.addEventListener('zeroResults', () => {
+        showError("Nessun album trovato per questi filtri.");
+
+        // Go back to category screen
+        document.getElementById('feed-screen').classList.add('hidden');
+        document.getElementById('category-screen').classList.remove('hidden');
+
+        // Clean up feed container
+        const container = document.getElementById('feed-container');
+        container.innerHTML = '';
+        feedManager.cardBuffer = [];
+        if (feedManager.observer) feedManager.observer.disconnect();
+    });
 }
 
 function showError(msg) {
@@ -66,6 +80,7 @@ async function fetchNextCardData() {
         try {
             album = await discogsService.fetchRandomRelease(activeCriteria);
         } catch (e) {
+            if (e.code === 'ZERO_RESULTS') throw e;
             console.warn("fetchRandomRelease failed, retrying once", e);
             album = await discogsService.fetchRandomRelease(activeCriteria);
         }

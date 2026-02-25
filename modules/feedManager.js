@@ -83,6 +83,10 @@ export const feedManager = {
                             console.warn("Got album but no YouTube video, retrying silently...");
                         }
                     } catch (err) {
+                        if (err.code === 'ZERO_RESULTS') {
+                            document.dispatchEvent(new CustomEvent('zeroResults'));
+                            return; // Stop the feed preloading entirely
+                        }
                         console.error("Fetch failed for card, retrying silently", err);
                         // Backoff before retrying on hard error
                         await new Promise(resolve => setTimeout(resolve, 1500));
