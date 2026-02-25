@@ -1,6 +1,6 @@
 export const CONFIG = {
     DISCOGS_TOKEN: "fvYYQHvhAEHVshXGPHYtbAWSlTUNQpnNJcBBbYCB",
-    YOUTUBE_API_KEY: "AIzaSyBiNS-Xtp-Ck-z39OAxVCGtqZNx6h-pVW8",
+    YOUTUBE_API_KEY: "AIzaSyCzqWoDzcAO7eezfXPfguCwghlDh_ifZs8",
     DISCOGS_BASE_URL: "https://api.discogs.com",
     YOUTUBE_BASE_URL: "https://www.googleapis.com/youtube/v3",
     FEED_BUFFER_SIZE: 10,

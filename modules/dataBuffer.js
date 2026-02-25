@@ -5,7 +5,7 @@ export const dataBuffer = {
     albumQueue: [],
     readyQueue: [],
     TARGET_ALBUM_QUEUE: 15,
-    TARGET_READY_QUEUE: 8,
+    TARGET_READY_QUEUE: 3, // Reduced from 8 to save YouTube API quota (1 search = 100 units)
     isRunning: false,
     criteria: null,
 
@@ -59,16 +59,8 @@ export const dataBuffer = {
                 try {
                     let videoId = await youtubeService.searchVideo(album.artist, album.title, album.youtubeVideoIds);
 
-                    if (!videoId && !album.youtubePlaylistId && (!album.youtubeVideoIds || album.youtubeVideoIds.length === 0)) {
-                        try {
-                            const fetchedPlaylistId = await youtubeService.searchPlaylist(album.artist, album.title);
-                            if (fetchedPlaylistId) {
-                                album.youtubePlaylistId = fetchedPlaylistId;
-                            }
-                        } catch (e) {
-                            console.warn("YouTube playlist search failed", e);
-                        }
-                    }
+                    // To save massive quota overhead, we will NOT do a fallback playlist search here.
+                    // If the video isn't found, it simply pushes null and the native UI will render without YouTube overhead.
 
                     // Push valid or empty video to keep feed alive
                     this.readyQueue.push({ album, videoId });
