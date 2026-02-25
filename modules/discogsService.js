@@ -1,7 +1,20 @@
 import { CONFIG } from '../config.js';
 
 const totalPagesCache = {};
+const pendingPageProbes = {};
 const seenReleases = new Set();
+let lastDiscogsCall = 0;
+
+async function rateLimitedFetch(url, options) {
+    const now = Date.now();
+    const elapsed = now - lastDiscogsCall;
+    if (elapsed < 600) {
+        // Enforce max ~1.5 requests per second to stay well under Discogs 60/min limit
+        await new Promise(resolve => setTimeout(resolve, 600 - elapsed));
+    }
+    lastDiscogsCall = Date.now();
+    return fetch(url, options);
+}
 
 export const discogsService = {
     async fetchRandomRelease(criteria) {
@@ -34,25 +47,37 @@ export const discogsService = {
                 let data = null;
 
                 if (!totalPages) {
-                    // Step 1: Probe for total pages to ensure we don't request out of bounds
-                    const initialSearchUrl = `${CONFIG.DISCOGS_BASE_URL}/database/search?${params.toString()}`;
-                    let response = await fetch(initialSearchUrl, { headers });
+                    if (!pendingPageProbes[criteriaKey]) {
+                        pendingPageProbes[criteriaKey] = (async () => {
+                            // Step 1: Probe for total pages to ensure we don't request out of bounds
+                            const initialSearchUrl = `${CONFIG.DISCOGS_BASE_URL}/database/search?${params.toString()}`;
+                            let response = await rateLimitedFetch(initialSearchUrl, { headers });
 
-                    if (!response.ok) {
-                        if (response.status === 429) throw new Error('TOO_MANY_REQUESTS');
-                        throw new Error(`Discogs API Error: ${response.status}`);
+                            if (!response.ok) {
+                                if (response.status === 429) throw new Error('TOO_MANY_REQUESTS');
+                                throw new Error(`Discogs API Error: ${response.status}`);
+                            }
+
+                            const resData = await response.json();
+
+                            if (!resData.results || resData.results.length === 0) {
+                                const error = new Error("No results for criteria");
+                                error.code = 'ZERO_RESULTS';
+                                throw error;
+                            }
+
+                            totalPagesCache[criteriaKey] = Math.min(resData.pagination.pages, 200);
+                            return resData;
+                        })();
                     }
 
-                    data = await response.json();
-
-                    if (!data.results || data.results.length === 0) {
-                        const error = new Error("No results for criteria");
-                        error.code = 'ZERO_RESULTS';
-                        throw error;
+                    try {
+                        data = await pendingPageProbes[criteriaKey];
+                        totalPages = totalPagesCache[criteriaKey];
+                    } catch (err) {
+                        delete pendingPageProbes[criteriaKey];
+                        throw err;
                     }
-
-                    totalPages = Math.min(data.pagination.pages, 200);
-                    totalPagesCache[criteriaKey] = totalPages;
                 }
 
                 // Step 2: Pick a random page within the actual bounds
@@ -61,7 +86,7 @@ export const discogsService = {
                 if (randomPage > 1 || !data) {
                     params.set("page", randomPage);
                     const randomSearchUrl = `${CONFIG.DISCOGS_BASE_URL}/database/search?${params.toString()}`;
-                    let response = await fetch(randomSearchUrl, { headers });
+                    let response = await rateLimitedFetch(randomSearchUrl, { headers });
 
                     if (!response.ok) {
                         if (response.status === 404 && data) {
@@ -130,7 +155,7 @@ export const discogsService = {
             'User-Agent': "AntiGravityApp/1.0"
         };
 
-        const response = await fetch(detailsUrl, { headers });
+        const response = await rateLimitedFetch(detailsUrl, { headers });
         if (!response.ok) {
             throw new Error(`Discogs Release API Error: ${response.status}`);
         }
