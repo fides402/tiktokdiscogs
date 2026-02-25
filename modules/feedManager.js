@@ -81,8 +81,8 @@ export const feedManager = {
                             }
                             this.renderCard(i, data.album, data.videoId);
 
-                            // Let the system breathe before the next card to avoid API limits
-                            await new Promise(resolve => setTimeout(resolve, 800));
+                            // Let the system breathe slightly but not arbitrarily delay
+                            await new Promise(resolve => setTimeout(resolve, 100));
                         } else {
                             // Data valid but no YouTube video (edge case), try again immediately
                             console.warn("Got album but no YouTube video, retrying silently...");

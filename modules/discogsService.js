@@ -50,8 +50,6 @@ export const discogsService = {
                 if (randomPage > 1) {
                     params.set("page", randomPage);
                     const randomSearchUrl = `${CONFIG.DISCOGS_BASE_URL}/database/search?${params.toString()}`;
-                    // Add a small delay between requests
-                    await new Promise(resolve => setTimeout(resolve, 1000));
                     response = await fetch(randomSearchUrl, { headers });
 
                     if (!response.ok) {
@@ -75,9 +73,6 @@ export const discogsService = {
                 // Pick a random release from the results page
                 const randomReleaseSummary = data.results[Math.floor(Math.random() * data.results.length)];
 
-                // Small delay before detail fetch
-                await new Promise(resolve => setTimeout(resolve, 500));
-
                 // Fetch full release details
                 return await this.fetchReleaseDetails(randomReleaseSummary.id, criteria.genre || 'Mixed');
 
@@ -85,8 +80,8 @@ export const discogsService = {
                 if (attempt === maxRetries) {
                     throw error;
                 }
-                // Small delay before retry
-                await new Promise(resolve => setTimeout(resolve, 1500));
+                // Minor delay before retry
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
         }
     },
