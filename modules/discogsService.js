@@ -57,6 +57,8 @@ export const discogsService = {
                             // Fallback to page 1 data if our random page is stubbornly missing
                             console.warn(`Page ${randomPage} not found, falling back to page 1`);
                             // data is already from page 1
+                        } else if (response.status === 429) {
+                            throw new Error('TOO_MANY_REQUESTS');
                         } else {
                             throw new Error(`Discogs API Error on random page: ${response.status}`);
                         }
@@ -80,8 +82,17 @@ export const discogsService = {
                 if (attempt === maxRetries) {
                     throw error;
                 }
-                // Minor delay before retry
-                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Exponential backoff
+                const isRateLimit = (error.message === 'TOO_MANY_REQUESTS' || (error.message && error.message.includes('429')));
+                const baseDelay = isRateLimit ? 2500 : 500;
+                const backoff = Math.min(baseDelay * Math.pow(1.5, attempt), 10000);
+
+                if (isRateLimit) {
+                    console.warn(`Discogs Rate Limit hit, waiting ${backoff}ms...`);
+                }
+
+                await new Promise(resolve => setTimeout(resolve, backoff));
             }
         }
     },

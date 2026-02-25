@@ -70,6 +70,7 @@ export const feedManager = {
                 }
 
                 let success = false;
+                let attempt = 0;
                 while (!success) {
                     try {
                         const data = await this.fetchCallback();
@@ -81,20 +82,23 @@ export const feedManager = {
                             }
                             this.renderCard(i, data.album, data.videoId);
 
-                            // Let the system breathe slightly but not arbitrarily delay
-                            await new Promise(resolve => setTimeout(resolve, 100));
+                            // Let the system breathe to avoid API limits (Discogs limit is ~60 req/min)
+                            await new Promise(resolve => setTimeout(resolve, 400));
                         } else {
                             // Data valid but no YouTube video (edge case), try again immediately
                             console.warn("Got album but no YouTube video, retrying silently...");
+                            await new Promise(resolve => setTimeout(resolve, 500));
                         }
                     } catch (err) {
                         if (err.code === 'ZERO_RESULTS') {
                             document.dispatchEvent(new CustomEvent('zeroResults'));
                             return; // Stop the feed preloading entirely
                         }
-                        console.error("Fetch failed for card, retrying silently", err);
-                        // Backoff before retrying on hard error
-                        await new Promise(resolve => setTimeout(resolve, 1500));
+                        attempt++;
+                        console.error(`Fetch failed for card, retrying silently (attempt ${attempt})`, err);
+                        // Exponential backoff before retrying on hard error
+                        const backoff = Math.min(1000 * Math.pow(1.5, attempt), 10000);
+                        await new Promise(resolve => setTimeout(resolve, backoff));
                     }
                 }
             }
