@@ -3,7 +3,7 @@ export const CONFIG = {
     YOUTUBE_API_KEY: "AIzaSyBiNS-Xtp-Ck-z39OAxVCGtqZNx6h-pVW8",
     DISCOGS_BASE_URL: "https://api.discogs.com",
     YOUTUBE_BASE_URL: "https://www.googleapis.com/youtube/v3",
-    FEED_BUFFER_SIZE: 4,
+    FEED_BUFFER_SIZE: 6,
     GENRES: [
         "Electronic", "Hip Hop", "Jazz", "Rock", "Funk / Soul", "Pop", "Classical", "Latin", "Reggae", "Stage & Screen", "Blues", "Non-Music", "Children's", "Brass & Military", "Folk, World, & Country"
     ],

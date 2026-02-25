@@ -104,7 +104,7 @@ export const feedManager = {
 
         // If the user scrolled fast and reached the threshold while we were loading,
         // we might have missed the trigger event. Check again and load more if needed!
-        if (this.currentIndex + 2 >= this.cardBuffer.length) {
+        if (this.currentIndex + 4 >= this.cardBuffer.length) {
             this.preloadCards(this.cardBuffer.length);
         }
     },
@@ -207,7 +207,7 @@ export const feedManager = {
             }
         }
 
-        if (index + 2 >= this.cardBuffer.length) {
+        if (index + 4 >= this.cardBuffer.length) {
             this.preloadCards(this.cardBuffer.length);
         }
     },
