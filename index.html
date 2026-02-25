@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AntiGravity Music Explorer</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- Category Selector Screen -->
+    <section id="category-screen" class="screen">
+        <div class="category-header">
+            <h1>Scegli il tuo vibe</h1>
+            <p>Esplora le profondità della storia musicale.</p>
+        </div>
+        <div class="filter-container">
+            <div class="select-group">
+                <label>GENRE</label>
+                <select id="genre-select">
+                    <option value="">All Genres</option>
+                </select>
+            </div>
+            <div class="select-group">
+                <label>STYLE</label>
+                <select id="style-select">
+                    <option value="">All Styles</option>
+                </select>
+            </div>
+            <div class="select-group">
+                <label>ERA</label>
+                <select id="era-select">
+                    <option value="">All Eras</option>
+                </select>
+            </div>
+            <div class="select-group">
+                <label>COUNTRY</label>
+                <select id="country-select">
+                    <option value="">All Countries</option>
+                </select>
+            </div>
+        </div>
+        <div class="category-footer">
+            <button id="explore-btn">ESPLORA</button>
+        </div>
+    </section>
+
+    <!-- Feed Screen -->
+    <section id="feed-screen" class="screen hidden">
+        <div id="feed-container"></div>
+        <button id="open-filters-btn" class="floating-btn">
+            <span>⚙️ FILTRI</span>
+        </button>
+    </section>
+
+    <!-- Error Screen -->
+    <div id="error-toast" class="hidden"></div>
+
+    <!-- YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        function onYouTubeIframeAPIReady() {
+            document.dispatchEvent(new CustomEvent('ytApiReady'));
+        }
+    </script>
+
+    <!-- Main App -->
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>
