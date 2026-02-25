@@ -47,23 +47,20 @@ export const feedManager = {
     },
 
     async preloadCards(currentIndex) {
-        if (this.isPreloading) {
-            // If already preloading, just update the target index and let the existing loop handle it
-            this.targetPreloadIndex = Math.max(this.targetPreloadIndex || 0, currentIndex + CONFIG.FEED_BUFFER_SIZE);
-            return;
+        // Find the target max threshold (currentIndex + 8)
+        const targetCount = currentIndex + 8;
+
+        if (this.cardBuffer.length >= targetCount) {
+            return; // We already have enough cards initialized
         }
 
-        this.isPreloading = true;
-        this.targetPreloadIndex = Math.max(this.targetPreloadIndex || 0, currentIndex + CONFIG.FEED_BUFFER_SIZE);
+        // Let's create empty slots immediately up to targetCount
+        const missingCardsCount = targetCount - this.cardBuffer.length;
 
-        // Remove fetchTasks and Promise.allSettled entirely.
-        // We just let the while loop spawn promises and we immediately release the lock.
-        // This means the background tasks manage themselves.
-
-        while (this.cardBuffer.length < this.targetPreloadIndex) {
+        for (let j = 0; j < missingCardsCount; j++) {
             const i = this.cardBuffer.length;
 
-            // Initialize slot as loading
+            // Generate empty slot immediately in DOM
             this.cardBuffer.push({
                 index: i,
                 state: 'loading',
@@ -73,53 +70,29 @@ export const feedManager = {
                 playerInstance: null
             });
 
-            // Show loading spinner immediately if it's the current active card
-            if (i === this.currentIndex) {
+            if (i === this.currentIndex || i === this.currentIndex + 1) {
                 this.renderLoadingCard(i);
+            } else {
+                // For slots far ahead, we can just create the object and the DOM element silently
+                const el = document.createElement('div');
+                el.className = 'feed-card loading-card';
+                el.dataset.index = i;
+                el.innerHTML = '<div class="loading-spinner"></div>';
+                this.cardBuffer[i].domElement = el;
+                this.container.appendChild(el);
             }
 
-            // Launch fetch task concurrently and let it run free
+            // Asynchronously resolve this empty slot by asking the buffer
             (async (index) => {
-                let success = false;
-                let attempt = 0;
-                while (!success) {
-                    try {
-                        const data = await this.fetchCallback();
-                        if (data && data.videoId && data.album) {
-                            success = true;
-                            // Clean up loading UI if present, then render
-                            if (this.cardBuffer[index].domElement) {
-                                this.cardBuffer[index].domElement.remove();
-                            }
-                            this.renderCard(index, data.album, data.videoId);
-
-                            // Let the system breathe to avoid API limits (Discogs limit is ~60 req/min)
-                            await new Promise(resolve => setTimeout(resolve, 400));
-                        } else {
-                            // Data valid but no YouTube video (edge case), try again immediately
-                            console.warn("Got album but no YouTube video, retrying silently...");
-                            await new Promise(resolve => setTimeout(resolve, 500));
-                        }
-                    } catch (err) {
-                        if (err.code === 'ZERO_RESULTS') {
-                            document.dispatchEvent(new CustomEvent('zeroResults'));
-                            return; // Stop the feed preloading entirely
-                        }
-                        attempt++;
-                        console.error(`Fetch failed for card, retrying silently (attempt ${attempt})`, err);
-                        // Exponential backoff before retrying on hard error
-                        const backoff = Math.min(1000 * Math.pow(1.5, attempt), 10000);
-                        await new Promise(resolve => setTimeout(resolve, backoff));
+                const data = await this.fetchCallback(); // This will point to dataBuffer.consume()
+                if (data && data.album) {
+                    if (this.cardBuffer[index].domElement) {
+                        this.cardBuffer[index].domElement.remove();
                     }
+                    this.renderCard(index, data.album, data.videoId);
                 }
             })(i);
-
-            // Stagger parallel request startups very slightly to prevent hitting 429 rate limit exactly at the same millisecond
-            await new Promise(resolve => setTimeout(resolve, 200));
         }
-
-        // Immediately release lock so further scrolling can spawn MORE workers if needed
-        this.isPreloading = false;
     },
 
     renderLoadingCard(index) {
@@ -188,17 +161,36 @@ export const feedManager = {
         this.container.appendChild(el);
         this.observer.observe(el);
 
-        // Wait for the ytApiReady event if needed, but in our case, we might be delayed enough.
-        // If not, videoPlayer handles queueing.
-        card.playerInstance = videoPlayer.createPlayer(el, videoId);
-
         // Play immediately if this is the active index
         if (index === this.currentIndex) {
-            videoPlayer.play(card.playerInstance);
+            this.handleCardVisible(index);
         }
     },
 
-    handleCardVisible(index) {
+    async createPlayerIfNeeded(index) {
+        if (index < 0 || index >= this.cardBuffer.length) return;
+        const card = this.cardBuffer[index];
+        if (!card || !card.domElement || card.state !== 'ready') return;
+
+        if (!card.playerInstance) {
+            card.playerInstance = await videoPlayer.createPlayer(card.domElement, card.videoId);
+        }
+    },
+
+    destroyPlayerIfExists(index) {
+        if (index < 0 || index >= this.cardBuffer.length) return;
+        const card = this.cardBuffer[index];
+        if (!card || !card.playerInstance) return;
+
+        videoPlayer.destroyPlayer(card.playerInstance);
+        card.playerInstance = null;
+
+        // Ensure the iframe is actually gone and container is ready for next time
+        const container = card.domElement.querySelector('.yt-player-container');
+        if (container) container.innerHTML = '';
+    },
+
+    async handleCardVisible(index) {
         if (this.currentIndex === index && !this.isNavigating) return;
 
         const oldCard = this.cardBuffer[this.currentIndex];
@@ -207,22 +199,38 @@ export const feedManager = {
         }
 
         this.currentIndex = index;
-        const newCard = this.cardBuffer[index];
 
-        if (newCard && newCard.playerInstance) {
-            if (typeof newCard.playerInstance.seekTo === 'function') {
-                newCard.playerInstance.seekTo(0);
-            }
-            videoPlayer.play(newCard.playerInstance);
-            // Subsequent videos can play with sound after interaction
-            if (index > 0 && typeof newCard.playerInstance.unMute === 'function') {
-                newCard.playerInstance.unMute();
-            }
-        }
+        // Manage rolling player window: max 3 players active
+        this.createPlayerIfNeeded(index - 1).then(() => {
+            const prevCard = this.cardBuffer[index - 1];
+            if (prevCard && prevCard.playerInstance) videoPlayer.pause(prevCard.playerInstance);
+        });
 
-        if (index + 4 >= this.cardBuffer.length) {
-            this.preloadCards(this.currentIndex);
-        }
+        this.createPlayerIfNeeded(index).then(() => {
+            const newCard = this.cardBuffer[index];
+            if (newCard && newCard.playerInstance) {
+                if (typeof newCard.playerInstance.seekTo === 'function') {
+                    newCard.playerInstance.seekTo(0);
+                }
+                videoPlayer.play(newCard.playerInstance);
+                // Subsequent videos can play with sound after interaction
+                if (index > 0 && typeof newCard.playerInstance.unMute === 'function') {
+                    newCard.playerInstance.unMute();
+                }
+            }
+        });
+
+        this.createPlayerIfNeeded(index + 1).then(() => {
+            const nextCard = this.cardBuffer[index + 1];
+            if (nextCard && nextCard.playerInstance) videoPlayer.pause(nextCard.playerInstance);
+        });
+
+        // Destroy players outside the window
+        this.destroyPlayerIfExists(index - 2);
+        this.destroyPlayerIfExists(index + 2);
+
+        // Trigger preload to guarantee N+8
+        this.preloadCards(this.currentIndex);
     },
 
     navigateTo(index) {

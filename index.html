@@ -62,12 +62,12 @@
     <div id="error-toast" class="hidden"></div>
 
     <!-- YouTube IFrame API -->
-    <script src="https://www.youtube.com/iframe_api"></script>
     <script>
-        function onYouTubeIframeAPIReady() {
-            document.dispatchEvent(new CustomEvent('ytApiReady'));
-        }
+        window._ytApiReadyResolve = null;
+        window.ytApiReady = new Promise(resolve => { window._ytApiReadyResolve = resolve; });
+        window.onYouTubeIframeAPIReady = function () { window._ytApiReadyResolve(window.YT); };
     </script>
+    <script src="https://www.youtube.com/iframe_api"></script>
 
     <!-- Main App -->
     <script type="module" src="app.js"></script>

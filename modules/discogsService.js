@@ -8,16 +8,16 @@ let lastDiscogsCall = 0;
 async function rateLimitedFetch(url, options) {
     const now = Date.now();
     const elapsed = now - lastDiscogsCall;
-    if (elapsed < 600) {
-        // Enforce max ~1.5 requests per second to stay well under Discogs 60/min limit
-        await new Promise(resolve => setTimeout(resolve, 600 - elapsed));
+    if (elapsed < 400) {
+        // Enforce max ~2.5 requests per second (150/min)
+        await new Promise(resolve => setTimeout(resolve, 400 - elapsed));
     }
     lastDiscogsCall = Date.now();
     return fetch(url, options);
 }
 
 export const discogsService = {
-    async fetchRandomRelease(criteria) {
+    async fetchRandomRelease(criteria, fetchDetails = false) {
         if (!criteria) {
             throw new Error("No criteria selected");
         }
@@ -25,7 +25,7 @@ export const discogsService = {
         // Build query params
         const params = new URLSearchParams({
             type: "release",
-            per_page: 50,
+            per_page: 100,
             page: 1  // Always start with page 1 to discover pagination limits
         });
 
@@ -126,7 +126,31 @@ export const discogsService = {
                     seenReleases.delete(iterator.next().value); // Remove oldest
                 }
 
-                // Fetch full release details
+                // Return simplified metadata immediately if details aren't requested
+                if (!fetchDetails) {
+                    // Title in search results is usually "Artist - Title"
+                    let artist = "Unknown Artist";
+                    let title = randomReleaseSummary.title || "Unknown Title";
+
+                    if (randomReleaseSummary.title && randomReleaseSummary.title.includes(' - ')) {
+                        const parts = randomReleaseSummary.title.split(' - ');
+                        artist = parts[0].trim();
+                        title = parts.slice(1).join(' - ').trim();
+                    }
+
+                    return {
+                        id: randomReleaseSummary.id,
+                        artist: artist,
+                        title: title,
+                        year: randomReleaseSummary.year || criteria.year || "Unknown Year",
+                        genres: randomReleaseSummary.style || randomReleaseSummary.genre || [criteria.genre || 'Mixed'],
+                        cover: randomReleaseSummary.cover_image || randomReleaseSummary.thumb || "",
+                        youtubeVideoIds: [], // We don't have these without details
+                        youtubePlaylistId: null
+                    };
+                }
+
+                // Fetch full release details only if explicitly asked
                 return await this.fetchReleaseDetails(randomReleaseSummary.id, criteria.genre || 'Mixed');
 
             } catch (error) {

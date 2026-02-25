@@ -2,14 +2,12 @@ import { categorySelector } from './modules/categorySelector.js';
 import { discogsService } from './modules/discogsService.js';
 import { youtubeService } from './modules/youtubeService.js';
 import { feedManager } from './modules/feedManager.js';
+import { dataBuffer } from './modules/dataBuffer.js';
 
 let activeCriteria = null;
-let ytApiReady = false;
 
-function init() {
-    document.addEventListener('ytApiReady', () => {
-        ytApiReady = true;
-    });
+async function init() {
+    await window.ytApiReady;
 
     const categoryScreen = document.getElementById('category-screen');
     categorySelector.init(categoryScreen);
@@ -20,8 +18,13 @@ function init() {
         document.getElementById('category-screen').classList.add('hidden');
         document.getElementById('feed-screen').classList.remove('hidden');
 
+        // Start background pipeline
+        dataBuffer.startPipeline(activeCriteria);
+
         const container = document.getElementById('feed-container');
-        feedManager.init(container, fetchNextCardData);
+        feedManager.init(container, async () => {
+            return await dataBuffer.consume();
+        });
     });
 
     const openFiltersBtn = document.getElementById('open-filters-btn');
@@ -43,6 +46,7 @@ function init() {
             const container = document.getElementById('feed-container');
             container.innerHTML = '';
             feedManager.cardBuffer = [];
+            dataBuffer.stopPipeline();
             if (feedManager.observer) feedManager.observer.disconnect();
         });
     }
@@ -62,6 +66,7 @@ function init() {
         const container = document.getElementById('feed-container');
         container.innerHTML = '';
         feedManager.cardBuffer = [];
+        dataBuffer.stopPipeline();
         if (feedManager.observer) feedManager.observer.disconnect();
     });
 }
@@ -73,42 +78,6 @@ function showError(msg) {
     setTimeout(() => toast.classList.add('hidden'), 3000);
 }
 
-async function fetchNextCardData() {
-    try {
-        let album = null;
-
-        try {
-            album = await discogsService.fetchRandomRelease(activeCriteria);
-        } catch (e) {
-            if (e.code === 'ZERO_RESULTS') throw e;
-            console.warn("fetchRandomRelease failed, retrying once", e);
-            album = await discogsService.fetchRandomRelease(activeCriteria);
-        }
-
-        let videoId = null;
-        try {
-            videoId = await youtubeService.searchVideo(album.artist, album.title, album.youtubeVideoIds);
-        } catch (e) {
-            console.warn("YouTube search failed to find a video", e);
-        }
-
-        if (!album.youtubePlaylistId && (!album.youtubeVideoIds || album.youtubeVideoIds.length === 0)) {
-            try {
-                const fetchedPlaylistId = await youtubeService.searchPlaylist(album.artist, album.title);
-                if (fetchedPlaylistId) {
-                    album.youtubePlaylistId = fetchedPlaylistId;
-                }
-            } catch (e) {
-                console.warn("YouTube playlist search failed", e);
-            }
-        }
-
-        return { album, videoId };
-    } catch (error) {
-        console.error("Complete failure in fetchNextCardData", error);
-        // We let feedManager handle the retry silently
-        throw error;
-    }
-}
+// Removed manual fetchNextCardData, handled by dataBuffer now.
 
 document.addEventListener('DOMContentLoaded', init);

@@ -1,5 +1,5 @@
 export const videoPlayer = {
-    createPlayer(cardElement, videoId) {
+    async createPlayer(cardElement, videoId) {
         // Ensure YT API is ready
         if (typeof window.YT === 'undefined' || typeof window.YT.Player === 'undefined') {
             console.warn("YouTube API not ready yet");
@@ -15,6 +15,8 @@ export const videoPlayer = {
         const playerDiv = document.createElement('div');
         playerDiv.id = playerId;
         container.appendChild(playerDiv);
+
+        await window.ytApiReady;
 
         return new window.YT.Player(playerId, {
             videoId: videoId,
