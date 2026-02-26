@@ -78,6 +78,18 @@ async function init() {
         feedManager.navigateTo(feedManager.currentIndex + 1);
     });
 
+    document.addEventListener('channelLoadError', () => {
+        showError("Impossibile caricare i canali. Controlla la chiave API YouTube.");
+
+        document.getElementById('feed-screen').classList.add('hidden');
+        document.getElementById('category-screen').classList.remove('hidden');
+
+        const container = document.getElementById('feed-container');
+        container.innerHTML = '';
+        feedManager.cardBuffer = [];
+        if (feedManager.observer) feedManager.observer.disconnect();
+    });
+
     document.addEventListener('zeroResults', () => {
         showError("Nessun album trovato per questi filtri.");
 
