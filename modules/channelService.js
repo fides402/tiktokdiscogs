@@ -20,7 +20,19 @@ const CHANNELS = [
 const uploadsId = ch => 'UU' + ch.channelId.slice(2);
 
 const cache = {}; // handle -> { videos: [], nextPageToken: null, isFullyLoaded: false, isSyncing: false }
-const seenVideos = new Set();
+
+// Persist seen videos across page reloads so the same videos never resurface.
+function _loadSeenVideos() {
+    try {
+        const stored = localStorage.getItem('seen_videos');
+        if (stored) return new Set(JSON.parse(stored));
+    } catch (e) {}
+    return new Set();
+}
+function _saveSeenVideos() {
+    try { localStorage.setItem('seen_videos', JSON.stringify([...seenVideos])); } catch (e) {}
+}
+const seenVideos = _loadSeenVideos();
 
 // ─── Cache Management ─────────────────────────────────────────────────────────
 
@@ -204,6 +216,7 @@ export const channelService = {
 
         seenVideos.add(videoId);
         if (seenVideos.size > 2000) seenVideos.delete(seenVideos.values().next().value);
+        _saveSeenVideos();
 
         const snippet = item.snippet || {};
         const { artist, title } = parseTitle(snippet.title || '');

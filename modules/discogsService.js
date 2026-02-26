@@ -2,9 +2,21 @@ import { CONFIG } from '../config.js';
 
 const totalPagesCache = {};
 const pendingPageProbes = {};
-const criteriaReleasePools = {}; // Caches up to 100 releases per criteria!
-const seenReleases = new Set();
+const criteriaReleasePools = {};
 let lastDiscogsCall = 0;
+
+// Persist seen releases across page reloads so the same albums never resurface.
+function _loadSeenReleases() {
+    try {
+        const stored = localStorage.getItem('seen_releases');
+        if (stored) return new Set(JSON.parse(stored));
+    } catch (e) {}
+    return new Set();
+}
+function _saveSeenReleases() {
+    try { localStorage.setItem('seen_releases', JSON.stringify([...seenReleases])); } catch (e) {}
+}
+const seenReleases = _loadSeenReleases();
 
 async function rateLimitedFetch(url, options) {
     const now = Date.now();
@@ -129,12 +141,12 @@ export const discogsService = {
                     continue;
                 }
 
-                // Add to seen Set
+                // Add to seen Set and persist so reloads don't repeat the same releases
                 seenReleases.add(randomReleaseSummary.id);
                 if (seenReleases.size > 2000) {
-                    const iterator = seenReleases.values();
-                    seenReleases.delete(iterator.next().value); // Remove oldest
+                    seenReleases.delete(seenReleases.values().next().value);
                 }
+                _saveSeenReleases();
 
 
                 return this.formatReleaseSummary(randomReleaseSummary, criteria, fetchDetails);
