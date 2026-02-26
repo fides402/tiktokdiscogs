@@ -20,14 +20,14 @@ export const feedManager = {
         // Set up intersection observer to detect current card
         this.observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
-                if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
                     const index = parseInt(entry.target.dataset.index, 10);
                     this.handleCardVisible(index);
                 }
             });
         }, {
             root: this.container,
-            threshold: [0.5]
+            threshold: [0, 0.25, 0.5, 0.75, 1.0]
         });
 
         // Keyboard navigation
@@ -85,7 +85,8 @@ export const feedManager = {
             // Asynchronously resolve this empty slot by asking the buffer
             (async (index) => {
                 const data = await this.fetchCallback(); // This will point to dataBuffer.consume()
-                if (data && data.album) {
+                // Guard: pipeline may have been reset while we were waiting
+                if (data && data.album && this.cardBuffer[index]) {
                     if (this.cardBuffer[index].domElement) {
                         this.cardBuffer[index].domElement.remove();
                     }
@@ -120,8 +121,8 @@ export const feedManager = {
         ytContainer.className = 'yt-player-container';
         el.appendChild(ytContainer);
 
-        // Add overlay details
-        const overlay = overlayUI.createOverlay(album);
+        // Add overlay details (pass videoId as fallback for PLAYLIST button)
+        const overlay = overlayUI.createOverlay(album, videoId);
 
         // Add click listener for Play/Pause
         overlay.addEventListener('click', (e) => {
@@ -161,6 +162,10 @@ export const feedManager = {
         this.container.appendChild(el);
         this.observer.observe(el);
 
+        // Start creating the YT player immediately so the iframe has time to load
+        // before the user scrolls to this card (cards are rendered 8 slots ahead).
+        this.createPlayerIfNeeded(index);
+
         // Play immediately if this is the active index
         if (index === this.currentIndex) {
             this.handleCardVisible(index);
@@ -173,7 +178,8 @@ export const feedManager = {
         if (!card || !card.domElement || card.state !== 'ready') return;
 
         if (!card.playerInstance) {
-            card.playerInstance = await videoPlayer.createPlayer(card.domElement, card.videoId);
+            const playlistId = card.album ? card.album.youtubePlaylistId : null;
+            card.playerInstance = await videoPlayer.createPlayer(card.domElement, card.videoId, playlistId);
         }
     },
 
@@ -191,7 +197,10 @@ export const feedManager = {
     },
 
     async handleCardVisible(index) {
-        if (this.currentIndex === index && !this.isNavigating) return;
+        // Only skip if we're already on this card AND the player already exists
+        // (avoids blocking initial play when currentIndex === index but player is not yet created)
+        const existingCard = this.cardBuffer[index];
+        if (this.currentIndex === index && !this.isNavigating && existingCard && existingCard.playerInstance) return;
 
         const oldCard = this.cardBuffer[this.currentIndex];
         if (oldCard && oldCard.playerInstance) {
@@ -200,7 +209,7 @@ export const feedManager = {
 
         this.currentIndex = index;
 
-        // Manage rolling player window: max 3 players active
+        // Rolling player window: keep N-1, N, N+1, N+2 alive so videos buffer ahead of time
         this.createPlayerIfNeeded(index - 1).then(() => {
             const prevCard = this.cardBuffer[index - 1];
             if (prevCard && prevCard.playerInstance) videoPlayer.pause(prevCard.playerInstance);
@@ -209,7 +218,11 @@ export const feedManager = {
         this.createPlayerIfNeeded(index).then(() => {
             const newCard = this.cardBuffer[index];
             if (newCard && newCard.playerInstance) {
-                if (typeof newCard.playerInstance.seekTo === 'function') {
+                // Only seek to start if the player has already been used (state !== -1 unstarted)
+                const state = typeof newCard.playerInstance.getPlayerState === 'function'
+                    ? newCard.playerInstance.getPlayerState()
+                    : -1;
+                if (state !== -1 && typeof newCard.playerInstance.seekTo === 'function') {
                     newCard.playerInstance.seekTo(0);
                 }
                 videoPlayer.play(newCard.playerInstance);
@@ -220,14 +233,16 @@ export const feedManager = {
             }
         });
 
+        // Pre-load the next two cards so their iframes are ready when the user swipes
         this.createPlayerIfNeeded(index + 1).then(() => {
             const nextCard = this.cardBuffer[index + 1];
             if (nextCard && nextCard.playerInstance) videoPlayer.pause(nextCard.playerInstance);
         });
+        this.createPlayerIfNeeded(index + 2); // silently pre-buffer, no action needed
 
-        // Destroy players outside the window
+        // Destroy players outside the window (keep N-1 … N+2, destroy N-2 and N+3)
         this.destroyPlayerIfExists(index - 2);
-        this.destroyPlayerIfExists(index + 2);
+        this.destroyPlayerIfExists(index + 3);
 
         // Trigger preload to guarantee N+8
         this.preloadCards(this.currentIndex);

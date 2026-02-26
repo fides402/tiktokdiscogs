@@ -1,6 +1,6 @@
 export const videoPlayer = {
-    async createPlayer(cardElement, videoId) {
-        if (!videoId) return null;
+    async createPlayer(cardElement, videoId, playlistId = null) {
+        if (!videoId && !playlistId) return null;
 
         // Ensure YT API is ready
         if (typeof window.YT === 'undefined' || typeof window.YT.Player === 'undefined') {
@@ -13,24 +13,32 @@ export const videoPlayer = {
         if (!container) return null;
 
         // Unique ID for the player div
-        const playerId = `yt-player-${videoId}-${Date.now()}`;
+        const playerId = `yt-player-${videoId || playlistId}-${Date.now()}`;
         const playerDiv = document.createElement('div');
         playerDiv.id = playerId;
         container.appendChild(playerDiv);
 
         await window.ytApiReady;
 
+        const playerVars = {
+            autoplay: 0,
+            controls: 0,
+            modestbranding: 1,
+            playsinline: 1,
+            rel: 0,
+            iv_load_policy: 3,
+            mute: 1
+        };
+
+        // If no individual video ID, play the Discogs playlist instead
+        if (!videoId && playlistId) {
+            playerVars.list = playlistId;
+            playerVars.listType = 'playlist';
+        }
+
         return new window.YT.Player(playerId, {
-            videoId: videoId,
-            playerVars: {
-                autoplay: 0,
-                controls: 0,
-                modestbranding: 1,
-                playsinline: 1,
-                rel: 0,
-                iv_load_policy: 3,
-                mute: 1 // Start muted for autoplay policies, will add unmute logic in feedManager/app
-            },
+            videoId: videoId || undefined,
+            playerVars,
             events: {
                 onStateChange: (event) => {
                     if (event.data === window.YT.PlayerState.ENDED) {

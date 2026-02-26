@@ -1,7 +1,15 @@
 import { youtubeService } from './youtubeService.js';
 
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export const overlayUI = {
-  createOverlay(album) {
+  createOverlay(album, videoId = null) {
     const overlay = document.createElement('div');
     overlay.className = 'card-overlay';
 
@@ -11,28 +19,43 @@ export const overlayUI = {
     let playlistBtnHref = '#';
     let playlistTarget = '';
 
-    if (album.youtubePlaylistId || (album.youtubeVideoIds && album.youtubeVideoIds.length > 0)) {
-      // Check for Android intent
-      const isAndroid = navigator.userAgent.includes("Android");
-      if (isAndroid) {
-        playlistBtnHref = youtubeService.buildPlaylistIntentUrl(album.youtubePlaylistId, album.youtubeVideoIds);
-      } else {
-        playlistBtnHref = youtubeService.buildPlaylistWebUrl(album.youtubePlaylistId, album.youtubeVideoIds);
-        playlistTarget = '_blank';
-      }
+    if (album.isChannelMode) {
+      // Channel mode: second button opens the specific video on YouTube
+      playlistBtnText = '▶ VIDEO';
+      playlistBtnHref = `https://www.youtube.com/watch?v=${videoId}`;
+      playlistTarget = '_blank';
     } else {
-      playlistBtnClass += ' disabled';
-      playlistBtnText = 'NO PLAYLIST';
+      const hasDiscogsData = album.youtubePlaylistId || (album.youtubeVideoIds && album.youtubeVideoIds.length > 0);
+
+      if (hasDiscogsData || videoId) {
+        const isAndroid = navigator.userAgent.includes("Android");
+        if (hasDiscogsData) {
+          // Prefer Discogs playlist/video list
+          if (isAndroid) {
+            playlistBtnHref = youtubeService.buildPlaylistIntentUrl(album.youtubePlaylistId, album.youtubeVideoIds);
+          } else {
+            playlistBtnHref = youtubeService.buildPlaylistWebUrl(album.youtubePlaylistId, album.youtubeVideoIds);
+            playlistTarget = '_blank';
+          }
+        } else {
+          // Fallback: open the single resolved video
+          playlistBtnHref = `https://www.youtube.com/watch?v=${videoId}`;
+          playlistTarget = '_blank';
+        }
+      } else {
+        playlistBtnClass += ' disabled';
+        playlistBtnText = 'NO PLAYLIST';
+      }
     }
 
-    const categoryName = album.category ? album.category.toUpperCase() : 'UNKNOWN';
+    const categoryName = escHtml(album.category ? album.category.toUpperCase() : 'UNKNOWN');
 
     overlay.innerHTML = `
       <div class="overlay-top">
         <span class="category-badge">${categoryName}</span>
-        <span class="artist-name">${album.artist}</span>
-        <span class="album-title">${album.title}</span>
-        <span class="album-year">${album.year}</span>
+        <span class="artist-name">${escHtml(album.artist)}</span>
+        <span class="album-title">${escHtml(album.title)}</span>
+        <span class="album-year">${escHtml(album.year)}</span>
       </div>
       <div class="overlay-bottom">
         <a href="${album.discogsUrl}" target="_blank" class="action-btn">

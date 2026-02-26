@@ -27,6 +27,26 @@ async function init() {
         });
     });
 
+    // "CANALI CURATI" button — starts channel mode without any category selection
+    const channelsBtn = document.getElementById('channels-btn');
+    if (channelsBtn) {
+        channelsBtn.addEventListener('click', () => {
+            document.getElementById('category-screen').classList.add('hidden');
+            document.getElementById('feed-screen').classList.remove('hidden');
+
+            // Label the back button as HOME since there are no filters in this mode
+            const filtersBtn = document.getElementById('open-filters-btn');
+            if (filtersBtn) filtersBtn.querySelector('span').textContent = '⚙️ HOME';
+
+            dataBuffer.startChannelPipeline();
+
+            const container = document.getElementById('feed-container');
+            feedManager.init(container, async () => {
+                return await dataBuffer.consume();
+            });
+        });
+    }
+
     const openFiltersBtn = document.getElementById('open-filters-btn');
     if (openFiltersBtn) {
         openFiltersBtn.addEventListener('click', () => {
@@ -38,11 +58,14 @@ async function init() {
                 }
             }
 
+            // Reset back-button label for next session
+            openFiltersBtn.querySelector('span').textContent = '⚙️ FILTRI';
+
             // Go back to category screen
             document.getElementById('feed-screen').classList.add('hidden');
             document.getElementById('category-screen').classList.remove('hidden');
 
-            // Optionally clean up feed container totally, so it reinstantiates clean
+            // Clean up feed container so it reinstantiates clean on next exploration
             const container = document.getElementById('feed-container');
             container.innerHTML = '';
             feedManager.cardBuffer = [];

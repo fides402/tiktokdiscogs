@@ -1,39 +1,90 @@
 import { discogsService } from './discogsService.js';
-import { youtubeService } from './youtubeService.js';
+import { channelService } from './channelService.js';
 
 export const dataBuffer = {
     albumQueue: [],
     readyQueue: [],
     TARGET_ALBUM_QUEUE: 15,
-    TARGET_READY_QUEUE: 5, // Increased to 5 for better fluidity since 3 caused stuttering
+    TARGET_READY_QUEUE: 5,
     isRunning: false,
     criteria: null,
+    _generation: 0,
 
     startPipeline(criteria) {
+        // Increment generation to invalidate any loops from a previous pipeline
+        this._generation++;
+        const gen = this._generation;
+
+        // Reset Discogs caches so every new exploration starts with fresh, unpredictable results
+        discogsService.clearSession();
+
         this.criteria = criteria;
         this.albumQueue = [];
         this.readyQueue = [];
         this.isRunning = true;
 
         // Loop 1: Discogs Queue (always keep ~15 albums ready)
-        this.runDiscogsLoop();
+        this.runDiscogsLoop(gen);
 
-        // Loop 2: YouTube Queue (always keep ~8 full videos ready)
-        this.runYoutubeLoop();
+        // Loop 2: YouTube Queue (always keep ~5 full items ready)
+        this.runYoutubeLoop(gen);
+    },
+
+    startChannelPipeline() {
+        this._generation++;
+        const gen = this._generation;
+
+        channelService.clearSession();
+
+        this.albumQueue = [];
+        this.readyQueue = [];
+        this.isRunning = true;
+
+        this.runChannelsLoop(gen);
+    },
+
+    async runChannelsLoop(gen) {
+        // Pre-load first page of videos for all channels before starting
+        await channelService.init();
+        if (this._generation !== gen) return; // Stopped during init
+
+        while (this.isRunning && this._generation === gen) {
+            if (this.readyQueue.length < this.TARGET_READY_QUEUE) {
+                try {
+                    const album = await channelService.fetchRandomVideo();
+                    if (!album) {
+                        await new Promise(r => setTimeout(r, 500));
+                        continue;
+                    }
+                    if (this._generation === gen) {
+                        this.readyQueue.push({ album, videoId: album.youtubeVideoIds[0] });
+                    }
+                } catch (err) {
+                    console.error('Channel pipeline error:', err);
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            } else {
+                await new Promise(r => setTimeout(r, 200));
+            }
+        }
     },
 
     stopPipeline() {
         this.isRunning = false;
+        this._generation++; // Invalidate running loops immediately
     },
 
-    async runDiscogsLoop() {
-        while (this.isRunning) {
+    async runDiscogsLoop(gen) {
+        while (this.isRunning && this._generation === gen) {
             // We must pass fetchDetails = true to obtain the release.videos from Discogs,
             // which saves us from doing a 100-quota-unit YouTube text search for every single card.
             if (this.albumQueue.length < this.TARGET_ALBUM_QUEUE) {
                 try {
                     const album = await discogsService.fetchRandomRelease(this.criteria, true);
-                    if (album) {
+                    // Only queue albums that have at least one YouTube video or playlist linked on Discogs
+                    const hasVideo = album && album.youtubeVideoIds && album.youtubeVideoIds.length > 0;
+                    const hasPlaylist = album && album.youtubePlaylistId;
+                    if (hasVideo || hasPlaylist) {
                         this.albumQueue.push(album);
                     }
                 } catch (err) {
@@ -52,33 +103,21 @@ export const dataBuffer = {
         }
     },
 
-    async runYoutubeLoop() {
-        while (this.isRunning) {
+    async runYoutubeLoop(gen) {
+        while (this.isRunning && this._generation === gen) {
             if (this.readyQueue.length < this.TARGET_READY_QUEUE && this.albumQueue.length > 0) {
                 // Take from album queue
                 const album = this.albumQueue.shift();
 
-                try {
-                    let videoId = await youtubeService.searchVideo(album.artist, album.title, album.youtubeVideoIds);
+                // Pick a video ID directly from Discogs data — no YouTube API call needed
+                let videoId = null;
+                if (album.youtubeVideoIds && album.youtubeVideoIds.length > 0) {
+                    videoId = album.youtubeVideoIds[Math.floor(Math.random() * album.youtubeVideoIds.length)];
+                }
+                // playlist-only albums: videoId stays null, player will use playlist mode
 
-                    if (!videoId && !album.youtubePlaylistId && (!album.youtubeVideoIds || album.youtubeVideoIds.length === 0)) {
-                        try {
-                            const fetchedPlaylistId = await youtubeService.searchPlaylist(album.artist, album.title);
-                            if (fetchedPlaylistId) {
-                                album.youtubePlaylistId = fetchedPlaylistId;
-                            }
-                        } catch (e) {
-                            console.warn("YouTube playlist search failed", e);
-                        }
-                    }
-
-                    // Push valid or empty video to keep feed alive
+                if (videoId || album.youtubePlaylistId) {
                     this.readyQueue.push({ album, videoId });
-                } catch (err) {
-                    console.error("YouTube pipeline error:", err);
-                    // Push the album anyway to prevent feed from hanging endlessly
-                    this.readyQueue.push({ album, videoId: null });
-                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
 
             } else {
