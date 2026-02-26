@@ -19,16 +19,21 @@ export const overlayUI = {
     let playlistBtnHref = '#';
     let playlistTarget = '';
 
+    const isAndroid = navigator.userAgent.includes("Android");
+
     if (album.isChannelMode) {
       // Channel mode: second button opens the specific video on YouTube
       playlistBtnText = '▶ VIDEO';
-      playlistBtnHref = `https://www.youtube.com/watch?v=${videoId}`;
-      playlistTarget = '_blank';
+      if (isAndroid) {
+        playlistBtnHref = youtubeService.buildVideoIntentUrl(videoId);
+      } else {
+        playlistBtnHref = `https://www.youtube.com/watch?v=${videoId}`;
+        playlistTarget = '_blank';
+      }
     } else {
       const hasDiscogsData = album.youtubePlaylistId || (album.youtubeVideoIds && album.youtubeVideoIds.length > 0);
 
       if (hasDiscogsData || videoId) {
-        const isAndroid = navigator.userAgent.includes("Android");
         if (hasDiscogsData) {
           // Prefer Discogs playlist/video list
           if (isAndroid) {
@@ -39,8 +44,12 @@ export const overlayUI = {
           }
         } else {
           // Fallback: open the single resolved video
-          playlistBtnHref = `https://www.youtube.com/watch?v=${videoId}`;
-          playlistTarget = '_blank';
+          if (isAndroid) {
+            playlistBtnHref = youtubeService.buildVideoIntentUrl(videoId);
+          } else {
+            playlistBtnHref = `https://www.youtube.com/watch?v=${videoId}`;
+            playlistTarget = '_blank';
+          }
         }
       } else {
         playlistBtnClass += ' disabled';
