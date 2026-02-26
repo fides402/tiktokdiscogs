@@ -2,9 +2,13 @@ export const videoPlayer = {
     async createPlayer(cardElement, videoId, playlistId = null, onEnded = null) {
         if (!videoId && !playlistId) return null;
 
-        // Ensure YT API is ready
+        // Wait for the YouTube IFrame API to finish loading before proceeding.
+        // This is the single place where we block on ytApiReady, so app.js
+        // init() can show the category screen immediately without waiting.
+        await window.ytApiReady;
+
         if (typeof window.YT === 'undefined' || typeof window.YT.Player === 'undefined') {
-            console.warn("YouTube API not ready yet");
+            console.warn("YouTube API failed to load");
             return null;
         }
 
@@ -50,8 +54,6 @@ export const videoPlayer = {
         const playerDiv = document.createElement('div');
         playerDiv.id = safePlayerId;
         container.appendChild(playerDiv);
-
-        await window.ytApiReady;
 
         return new Promise((resolve) => {
             let player;

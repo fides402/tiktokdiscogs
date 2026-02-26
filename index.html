@@ -6,9 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AntiGravity Music Explorer</title>
     <link rel="stylesheet" href="style.css">
-    <link
+    <!-- Preconnect to font origins so the DNS/TLS handshake is done before the
+         stylesheet requests its files, saving ~300 ms on first visit. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Load fonts without blocking rendering: media="print" lets the browser
+         fetch it in the background; onload switches it to screen styles. -->
+    <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap"
-        rel="stylesheet">
+        media="print" onload="this.media='all'">
+    <noscript>
+        <link rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap">
+    </noscript>
 </head>
 
 <body>
@@ -69,7 +79,12 @@
     <!-- YouTube IFrame API -->
     <script>
         window._ytApiReadyResolve = null;
-        window.ytApiReady = new Promise(resolve => { window._ytApiReadyResolve = resolve; });
+        window.ytApiReady = new Promise(resolve => {
+            window._ytApiReadyResolve = resolve;
+            // Safety net: if YouTube CDN fails or is blocked, unblock after 10 s
+            // so videoPlayer.createPlayer() can return null gracefully instead of hanging.
+            setTimeout(() => resolve(null), 10000);
+        });
         window.onYouTubeIframeAPIReady = function () { window._ytApiReadyResolve(window.YT); };
     </script>
     <script src="https://www.youtube.com/iframe_api"></script>
