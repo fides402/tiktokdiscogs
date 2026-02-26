@@ -61,18 +61,15 @@ export const dataBuffer = {
                 // Take from album queue
                 const album = this.albumQueue.shift();
 
-                try {
-                    // All albums in queue have youtubeVideoIds from Discogs, so this returns immediately
-                    const videoId = await youtubeService.searchVideo(album.artist, album.title, album.youtubeVideoIds);
+                // Pick a video ID directly from Discogs data — no YouTube API call needed
+                let videoId = null;
+                if (album.youtubeVideoIds && album.youtubeVideoIds.length > 0) {
+                    videoId = album.youtubeVideoIds[Math.floor(Math.random() * album.youtubeVideoIds.length)];
+                }
+                // playlist-only albums: videoId stays null, player will use playlist mode
 
-                    // Add to feed if we have a video ID or a playlist fallback
-                    if (videoId || album.youtubePlaylistId) {
-                        this.readyQueue.push({ album, videoId });
-                    }
-                } catch (err) {
-                    console.error("YouTube pipeline error:", err);
-                    // Skip albums with no video to keep feed clean
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                if (videoId || album.youtubePlaylistId) {
+                    this.readyQueue.push({ album, videoId });
                 }
 
             } else {

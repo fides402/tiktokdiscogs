@@ -1,7 +1,7 @@
 import { youtubeService } from './youtubeService.js';
 
 export const overlayUI = {
-  createOverlay(album) {
+  createOverlay(album, videoId = null) {
     const overlay = document.createElement('div');
     overlay.className = 'card-overlay';
 
@@ -11,13 +11,21 @@ export const overlayUI = {
     let playlistBtnHref = '#';
     let playlistTarget = '';
 
-    if (album.youtubePlaylistId || (album.youtubeVideoIds && album.youtubeVideoIds.length > 0)) {
-      // Check for Android intent
+    const hasDiscogsData = album.youtubePlaylistId || (album.youtubeVideoIds && album.youtubeVideoIds.length > 0);
+
+    if (hasDiscogsData || videoId) {
       const isAndroid = navigator.userAgent.includes("Android");
-      if (isAndroid) {
-        playlistBtnHref = youtubeService.buildPlaylistIntentUrl(album.youtubePlaylistId, album.youtubeVideoIds);
+      if (hasDiscogsData) {
+        // Prefer Discogs playlist/video list
+        if (isAndroid) {
+          playlistBtnHref = youtubeService.buildPlaylistIntentUrl(album.youtubePlaylistId, album.youtubeVideoIds);
+        } else {
+          playlistBtnHref = youtubeService.buildPlaylistWebUrl(album.youtubePlaylistId, album.youtubeVideoIds);
+          playlistTarget = '_blank';
+        }
       } else {
-        playlistBtnHref = youtubeService.buildPlaylistWebUrl(album.youtubePlaylistId, album.youtubeVideoIds);
+        // Fallback: open the single resolved video
+        playlistBtnHref = `https://www.youtube.com/watch?v=${videoId}`;
         playlistTarget = '_blank';
       }
     } else {

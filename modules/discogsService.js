@@ -141,7 +141,8 @@ export const discogsService = {
                 // Pick one release to return now, keep only a small subset in pool
                 // to force frequent random page fetches and ensure variety
                 const randomReleaseSummary = unseenResults.pop();
-                criteriaReleasePools[criteriaKey] = unseenResults.slice(0, 8);
+                // Keep only 1 in pool so the next call fetches a new random page → maximum variety
+                criteriaReleasePools[criteriaKey] = unseenResults.slice(0, 1);
 
                 return this.formatReleaseSummary(randomReleaseSummary, criteria, fetchDetails);
 
@@ -234,10 +235,16 @@ export const discogsService = {
                         if (vId) {
                             youtubeVideoIds.push(vId);
                         } else {
-                            // Playlist URL without individual video (e.g. /playlist?list=...)
-                            const listId = tempUrl.searchParams.get("list");
-                            if (listId && !youtubePlaylistId) {
-                                youtubePlaylistId = listId;
+                            // Check path-based IDs: /embed/ID or /v/ID
+                            const pathMatch = tempUrl.pathname.match(/\/(embed|v)\/([a-zA-Z0-9_-]{11})/);
+                            if (pathMatch) {
+                                youtubeVideoIds.push(pathMatch[2]);
+                            } else {
+                                // Playlist URL without individual video (e.g. /playlist?list=...)
+                                const listId = tempUrl.searchParams.get("list");
+                                if (listId && !youtubePlaylistId) {
+                                    youtubePlaylistId = listId;
+                                }
                             }
                         }
                     }

@@ -120,8 +120,8 @@ export const feedManager = {
         ytContainer.className = 'yt-player-container';
         el.appendChild(ytContainer);
 
-        // Add overlay details
-        const overlay = overlayUI.createOverlay(album);
+        // Add overlay details (pass videoId as fallback for PLAYLIST button)
+        const overlay = overlayUI.createOverlay(album, videoId);
 
         // Add click listener for Play/Pause
         overlay.addEventListener('click', (e) => {
