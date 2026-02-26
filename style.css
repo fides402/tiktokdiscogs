@@ -80,7 +80,7 @@ html {
   gap: 1.5rem;
   justify-content: center;
   max-width: 1000px;
-  margin-bottom: 5rem;
+  margin-bottom: 10rem;
   width: 100%;
 }
 
@@ -152,7 +152,9 @@ html {
   transform: translateX(-50%);
   width: 100%;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
   pointer-events: none;
 }
 
@@ -185,6 +187,50 @@ html {
   background: var(--accent);
   color: #fff;
   box-shadow: 0 10px 40px var(--accent-glow);
+}
+
+.or-divider {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  pointer-events: none;
+}
+
+#channels-btn {
+  background: var(--glass-bg);
+  color: #fff;
+  border: 1px solid var(--glass-border);
+  border-radius: 100px;
+  padding: 0.85rem 2.5rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all var(--transition-fast);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+#channels-btn small {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.5;
+}
+
+#channels-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: scale(1.03);
 }
 
 /* --- Feed Screen --- */

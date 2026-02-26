@@ -1,4 +1,5 @@
 import { discogsService } from './discogsService.js';
+import { channelService } from './channelService.js';
 
 export const dataBuffer = {
     albumQueue: [],
@@ -27,6 +28,45 @@ export const dataBuffer = {
 
         // Loop 2: YouTube Queue (always keep ~5 full items ready)
         this.runYoutubeLoop(gen);
+    },
+
+    startChannelPipeline() {
+        this._generation++;
+        const gen = this._generation;
+
+        channelService.clearSession();
+
+        this.albumQueue = [];
+        this.readyQueue = [];
+        this.isRunning = true;
+
+        this.runChannelsLoop(gen);
+    },
+
+    async runChannelsLoop(gen) {
+        // Pre-load first page of videos for all channels before starting
+        await channelService.init();
+        if (this._generation !== gen) return; // Stopped during init
+
+        while (this.isRunning && this._generation === gen) {
+            if (this.readyQueue.length < this.TARGET_READY_QUEUE) {
+                try {
+                    const album = await channelService.fetchRandomVideo();
+                    if (!album) {
+                        await new Promise(r => setTimeout(r, 500));
+                        continue;
+                    }
+                    if (this._generation === gen) {
+                        this.readyQueue.push({ album, videoId: album.youtubeVideoIds[0] });
+                    }
+                } catch (err) {
+                    console.error('Channel pipeline error:', err);
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            } else {
+                await new Promise(r => setTimeout(r, 200));
+            }
+        }
     },
 
     stopPipeline() {
