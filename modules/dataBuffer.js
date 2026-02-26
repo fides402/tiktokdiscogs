@@ -63,11 +63,13 @@ export const dataBuffer = {
                     // All albums in queue have youtubeVideoIds from Discogs, so this returns immediately
                     const videoId = await youtubeService.searchVideo(album.artist, album.title, album.youtubeVideoIds);
 
-                    this.readyQueue.push({ album, videoId });
+                    // Only add to feed if we have a valid video ID
+                    if (videoId) {
+                        this.readyQueue.push({ album, videoId });
+                    }
                 } catch (err) {
                     console.error("YouTube pipeline error:", err);
-                    // Push the album anyway to prevent feed from hanging endlessly
-                    this.readyQueue.push({ album, videoId: null });
+                    // Skip albums with no video to keep feed clean
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
 
