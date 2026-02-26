@@ -1,6 +1,6 @@
 export const videoPlayer = {
-    async createPlayer(cardElement, videoId) {
-        if (!videoId) return null;
+    async createPlayer(cardElement, videoId, playlistId = null) {
+        if (!videoId && !playlistId) return null;
 
         // Ensure YT API is ready
         if (typeof window.YT === 'undefined' || typeof window.YT.Player === 'undefined') {
@@ -12,18 +12,15 @@ export const videoPlayer = {
         const container = cardElement.querySelector('.yt-player-container');
         if (!container) return null;
 
-        // Unique ID for the player div
-        await window.ytApiReady;
-
         let primaryVideoId = videoId;
         const playerVars = {
-            autoplay: 0,
+            autoplay: 1,
             controls: 0,
             modestbranding: 1,
             playsinline: 1,
             rel: 0,
             iv_load_policy: 3,
-            mute: 1 // Start muted for autoplay policies, will add unmute logic in feedManager/app
+            mute: 1
         };
 
         // Handle arrays of video IDs (from Discogs videos)
@@ -41,21 +38,36 @@ export const videoPlayer = {
             primaryVideoId = '';
             playerVars.listType = 'playlist';
             playerVars.list = videoId;
+        } else if (!videoId && playlistId) {
+            // If no individual video ID, play the Discogs playlist instead
+            primaryVideoId = undefined;
+            playerVars.list = playlistId;
+            playerVars.listType = 'playlist';
         }
 
-        const safePlayerId = `yt-player-${typeof primaryVideoId === 'string' && primaryVideoId ? primaryVideoId : 'list'}-${Date.now()}`;
-
+        // Use safe ID
+        const safePlayerId = `yt-player-${typeof primaryVideoId === 'string' && primaryVideoId ? primaryVideoId : (playlistId || 'list')}-${Date.now()}`;
         const playerDiv = document.createElement('div');
         playerDiv.id = safePlayerId;
         container.appendChild(playerDiv);
 
+        await window.ytApiReady;
+
         return new Promise((resolve) => {
-            const player = new window.YT.Player(safePlayerId, {
+            let player;
+            // Safety net: if onReady never fires (e.g. network stall), unblock after 8s
+            const timeoutId = setTimeout(() => {
+                console.warn(`YT onReady timeout for ${primaryVideoId || playlistId}`);
+                resolve(player || null);
+            }, 8000);
+
+            player = new window.YT.Player(safePlayerId, {
                 videoId: primaryVideoId,
-                playerVars: playerVars,
+                playerVars,
                 events: {
-                    onReady: () => {
-                        resolve(player);
+                    onReady: (event) => {
+                        clearTimeout(timeoutId);
+                        resolve(event.target);
                     },
                     onStateChange: (event) => {
                         if (event.data === window.YT.PlayerState.ENDED) {
@@ -73,8 +85,7 @@ export const videoPlayer = {
                             }
 
                             if (isPlaylistFinished) {
-                                const endedEvent = new CustomEvent('videoEnded');
-                                document.dispatchEvent(endedEvent);
+                                document.dispatchEvent(new CustomEvent('videoEnded'));
                             }
                         }
                     }

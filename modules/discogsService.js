@@ -37,7 +37,6 @@ export const discogsService = {
 
         if (criteria.genre) params.append("genre", criteria.genre);
         if (criteria.style) params.append("style", criteria.style);
-
         // Handle decade randomly like rndmsound3, or pick a fully random year if not provided
         if (criteria.year) {
             const decadeBase = parseInt(criteria.year, 10);
@@ -48,7 +47,6 @@ export const discogsService = {
             const randomYear = 1960 + Math.floor(Math.random() * 64); // 1960 to 2023
             params.append("year", randomYear.toString());
         }
-
         if (criteria.country) params.append("country", criteria.country);
 
         // Mix up sorting to shuffle identical blocks
@@ -138,6 +136,7 @@ export const discogsService = {
                     seenReleases.delete(iterator.next().value); // Remove oldest
                 }
 
+
                 return this.formatReleaseSummary(randomReleaseSummary, criteria, fetchDetails);
 
             } catch (error) {
@@ -217,16 +216,33 @@ export const discogsService = {
 
         if (release.videos && release.videos.length > 0) {
             for (const video of release.videos) {
-                if (video.uri && video.uri.includes("youtube.com")) {
-                    try {
+                if (!video.uri) continue;
+                try {
+                    if (video.uri.includes("youtu.be/")) {
+                        // Short URL: https://youtu.be/VIDEO_ID
+                        const vId = new URL(video.uri).pathname.slice(1).split('?')[0];
+                        if (vId) youtubeVideoIds.push(vId);
+                    } else if (video.uri.includes("youtube.com")) {
                         const tempUrl = new URL(video.uri);
                         const vId = tempUrl.searchParams.get("v");
                         if (vId) {
                             youtubeVideoIds.push(vId);
+                        } else {
+                            // Check path-based IDs: /embed/ID or /v/ID
+                            const pathMatch = tempUrl.pathname.match(/\/(embed|v)\/([a-zA-Z0-9_-]{11})/);
+                            if (pathMatch) {
+                                youtubeVideoIds.push(pathMatch[2]);
+                            } else {
+                                // Playlist URL without individual video (e.g. /playlist?list=...)
+                                const listId = tempUrl.searchParams.get("list");
+                                if (listId && !youtubePlaylistId) {
+                                    youtubePlaylistId = listId;
+                                }
+                            }
                         }
-                    } catch (e) {
-                        // Intentionally ignore URL parse errors
                     }
+                } catch (e) {
+                    // Intentionally ignore URL parse errors
                 }
             }
         }
@@ -243,5 +259,13 @@ export const discogsService = {
             youtubeVideoIds,
             trackList
         };
+    },
+
+    // Call at the start of each new exploration session to guarantee fresh, varied results.
+    // criteriaReleasePools: prevents stale cached items from reappearing across sessions.
+    // seenReleases: prevents the same 2000-item window from cycling back to already-seen albums.
+    clearSession() {
+        seenReleases.clear();
+        Object.keys(criteriaReleasePools).forEach(k => delete criteriaReleasePools[k]);
     }
 };

@@ -86,6 +86,10 @@ export const youtubeService = {
         }
     },
 
+    buildVideoIntentUrl(videoId) {
+        return `intent://www.youtube.com/watch?v=${videoId}#Intent;scheme=http;action=android.intent.action.VIEW;end`;
+    },
+
     buildPlaylistIntentUrl(playlistId, videoIds = []) {
         if (playlistId) {
             return `intent://www.youtube.com/playlist?list=${playlistId}#Intent;scheme=http;action=android.intent.action.VIEW;end`;

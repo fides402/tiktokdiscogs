@@ -5,15 +5,34 @@ export const CONFIG = {
     YOUTUBE_BASE_URL: "https://www.googleapis.com/youtube/v3",
     FEED_BUFFER_SIZE: 10,
     GENRES: [
-        "Electronic", "Hip Hop", "Jazz", "Rock", "Funk / Soul", "Pop", "Classical", "Latin", "Reggae", "Stage & Screen", "Blues", "Non-Music", "Children's", "Brass & Military", "Folk, World, & Country"
+        "Rock", "Electronic", "Pop", "Jazz", "Funk / Soul", "Hip Hop", "Classical",
+        "Latin", "Reggae", "Stage & Screen", "Blues", "Non-Music", "Children's",
+        "Folk, World, & Country"
     ],
     STYLES: [
-        "Ambient", "Techno", "House", "Trance", "Experimental", "Drum n Bass", "Synth-pop", "Breakbeat", "Disco", "Hardcore", "Downtempo", "Electro", "Alternative Rock", "Indie Rock", "Punk", "Heavy Metal", "Hard Rock", "Psychedelic Rock", "Classic Rock", "Soul", "Rhythm & Blues", "Contemporary R&B", "Gospel", "Swing", "Free Jazz", "Cool Jazz", "Hard Bop", "Latin Jazz", "Bossa Nova", "Salsa", "Cumbia", "Tango", "Reggaeton", "Roots Reggae", "Dancehall", "Dub", "Ska", "Boom Bap", "Trap", "Conscious", "Gangsta", "Abstract", "Soundtrack", "Score", "Musical"
+        "House", "Techno", "Indie Rock", "Pop Rock", "Soul", "Disco", "Ambient",
+        "Experimental", "Electro", "Trance", "Hardcore", "Drum n Bass", "Jazz-Funk",
+        "Synth-pop", "Heavy Metal", "Punk", "Folk Rock", "Psychedelic Rock", "Blues Rock",
+        "Alternative Rock", "Deep House", "Minimal", "Dubstep", "Garage Rock", "New Wave",
+        "Post-Punk", "Goth Rock", "Shoegaze", "Dream Pop", "Trip Hop", "Big Beat", "IDM",
+        "Glitch", "Noise", "Industrial", "EBM", "Ska", "Dub", "Rocksteady", "Roots Reggae",
+        "Dancehall", "Bossa Nova", "Samba", "MPB", "Flamenco", "Tango", "Afrobeat",
+        "Highlife", "Krautrock", "Space Rock", "Stoner Rock", "Sludge", "Doom Metal",
+        "Black Metal", "Death Metal", "Thrash", "Grindcore", "Emo", "Hardcore Punk",
+        "Screamo", "Math Rock", "Post-Rock", "Lo-Fi", "Vaporwave", "City Pop"
     ],
     ERAS: [
-        "2020", "2010", "2000", "1990", "1980", "1970", "1960", "1950", "1940", "1930", "1920"
+        "2020", "2010", "2000", "1990", "1980", "1970", "1960", "1950"
     ],
     COUNTRIES: [
-        "US", "UK", "Germany", "France", "Japan", "Italy", "Canada", "Australia", "Brazil", "Netherlands", "Sweden", "Jamaica", "Spain", "Mexico", "Russia", "Argentina", "Colombia", "South Africa", "Nigeria", "South Korea"
+        "US", "UK", "Germany", "France", "Italy", "Japan", "Canada", "Australia",
+        "Netherlands", "Spain", "Sweden", "Brazil", "Belgium", "Russia", "Greece",
+        "Finland", "Norway", "Denmark", "Poland", "Austria", "Switzerland", "Mexico",
+        "Argentina", "Jamaica", "Ireland", "Portugal", "New Zealand", "Hungary",
+        "Czech Republic", "South Korea", "Turkey", "Yugoslavia", "USSR", "Colombia",
+        "Venezuela", "Chile", "Peru", "South Africa", "India", "Indonesia", "Philippines",
+        "Thailand", "Taiwan", "Hong Kong", "China", "Malaysia", "Singapore", "Israel",
+        "Egypt", "Lebanon", "Ukraine", "Romania", "Bulgaria", "Croatia", "Serbia",
+        "Slovakia", "Slovenia", "Lithuania", "Latvia", "Estonia", "Iceland"
     ]
 };

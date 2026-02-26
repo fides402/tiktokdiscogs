@@ -1,0 +1,13 @@
+# Proxy YouTube RSS feeds to avoid CORS restrictions.
+# These feeds require no API key and no quota.
+[[redirects]]
+  from   = "/api/yt-rss/:channelId"
+  to     = "https://www.youtube.com/feeds/videos.xml?channel_id=:channelId"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/api/yt-rss-user/:username"
+  to     = "https://www.youtube.com/feeds/videos.xml?user=:username"
+  status = 200
+  force  = true

@@ -17,14 +17,22 @@ export const feedManager = {
         this.currentIndex = 0;
         this.isPreloading = false;
 
-        // Set up intersection observer to detect current card
+        // Set up intersection observer to detect current card.
+        // Use a single threshold and pick only the most-visible entry per batch
+        // to avoid calling handleCardVisible for the outgoing card during a scroll
+        // transition (which would restart the previous track).
         this.observer = new IntersectionObserver((entries) => {
+            let best = null;
             entries.forEach(entry => {
-                if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
-                    const index = parseInt(entry.target.dataset.index, 10);
-                    this.handleCardVisible(index);
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+                    if (!best || entry.intersectionRatio > best.intersectionRatio) {
+                        best = entry;
+                    }
                 }
             });
+            if (best) {
+                this.handleCardVisible(parseInt(best.target.dataset.index, 10));
+            }
         }, {
             root: this.container,
             threshold: [0.5]
@@ -38,6 +46,16 @@ export const feedManager = {
                 this.navigateTo(this.currentIndex - 1);
             }
         });
+
+        // Bluetooth headphone next/prev track buttons via Media Session API
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.setActionHandler('nexttrack', () => {
+                this.navigateTo(this.currentIndex + 1);
+            });
+            navigator.mediaSession.setActionHandler('previoustrack', () => {
+                this.navigateTo(this.currentIndex - 1);
+            });
+        }
 
         // Swipe down/up handling could be handled implicitly by scroll-snap,
         // but the intersection observer catches the active element.
@@ -67,7 +85,8 @@ export const feedManager = {
                 album: null,
                 videoId: null,
                 domElement: null,
-                playerInstance: null
+                playerInstance: null,
+                _creatingPromise: null
             });
 
             if (i === this.currentIndex || i === this.currentIndex + 1) {
@@ -85,7 +104,8 @@ export const feedManager = {
             // Asynchronously resolve this empty slot by asking the buffer
             (async (index) => {
                 const data = await this.fetchCallback(); // This will point to dataBuffer.consume()
-                if (data && data.album) {
+                // Guard: pipeline may have been reset while we were waiting
+                if (data && data.album && this.cardBuffer[index]) {
                     if (this.cardBuffer[index].domElement) {
                         this.cardBuffer[index].domElement.remove();
                     }
@@ -115,13 +135,20 @@ export const feedManager = {
         el.className = 'feed-card';
         el.dataset.index = index;
 
+        // Show album cover as background while the YT iframe is loading
+        if (album.coverUrl) {
+            el.style.backgroundImage = `url('${album.coverUrl}')`;
+            el.style.backgroundSize = 'cover';
+            el.style.backgroundPosition = 'center';
+        }
+
         // Ensure we have a container for the player
         const ytContainer = document.createElement('div');
         ytContainer.className = 'yt-player-container';
         el.appendChild(ytContainer);
 
-        // Add overlay details
-        const overlay = overlayUI.createOverlay(album);
+        // Add overlay details (pass videoId as fallback for PLAYLIST button)
+        const overlay = overlayUI.createOverlay(album, videoId);
 
         // Add click listener for Play/Pause
         overlay.addEventListener('click', (e) => {
@@ -161,6 +188,12 @@ export const feedManager = {
         this.container.appendChild(el);
         this.observer.observe(el);
 
+        // Pre-create player for cards within 2 positions of the current card.
+        // The singleton _creatingPromise prevents double-creation on concurrent calls.
+        if (Math.abs(index - this.currentIndex) <= 2) {
+            this.createPlayerIfNeeded(index);
+        }
+
         // Play immediately if this is the active index
         if (index === this.currentIndex) {
             this.handleCardVisible(index);
@@ -171,10 +204,19 @@ export const feedManager = {
         if (index < 0 || index >= this.cardBuffer.length) return;
         const card = this.cardBuffer[index];
         if (!card || !card.domElement || card.state !== 'ready') return;
+        if (card.playerInstance) return;
 
-        if (!card.playerInstance) {
-            card.playerInstance = await videoPlayer.createPlayer(card.domElement, card.videoId);
+        // Singleton: if a creation is already in flight, await that same promise
+        // instead of spawning a second player on top of the first.
+        if (!card._creatingPromise) {
+            const playlistId = card.album ? card.album.youtubePlaylistId : null;
+            card._creatingPromise = videoPlayer.createPlayer(card.domElement, card.videoId, playlistId)
+                .then(player => {
+                    card.playerInstance = player;
+                    card._creatingPromise = null;
+                });
         }
+        return card._creatingPromise;
     },
 
     destroyPlayerIfExists(index) {
@@ -184,6 +226,7 @@ export const feedManager = {
 
         videoPlayer.destroyPlayer(card.playerInstance);
         card.playerInstance = null;
+        card._creatingPromise = null;
 
         // Ensure the iframe is actually gone and container is ready for next time
         const container = card.domElement.querySelector('.yt-player-container');
@@ -191,7 +234,10 @@ export const feedManager = {
     },
 
     async handleCardVisible(index) {
-        if (this.currentIndex === index && !this.isNavigating) return;
+        // Only skip if we're already on this card AND the player already exists
+        // (avoids blocking initial play when currentIndex === index but player is not yet created)
+        const existingCard = this.cardBuffer[index];
+        if (this.currentIndex === index && !this.isNavigating && existingCard && existingCard.playerInstance) return;
 
         const oldCard = this.cardBuffer[this.currentIndex];
         if (oldCard && oldCard.playerInstance) {
@@ -200,7 +246,7 @@ export const feedManager = {
 
         this.currentIndex = index;
 
-        // Manage rolling player window: max 3 players active
+        // Rolling player window: keep N-1, N, N+1, N+2 alive so videos buffer ahead of time
         this.createPlayerIfNeeded(index - 1).then(() => {
             const prevCard = this.cardBuffer[index - 1];
             if (prevCard && prevCard.playerInstance) videoPlayer.pause(prevCard.playerInstance);
@@ -209,7 +255,11 @@ export const feedManager = {
         this.createPlayerIfNeeded(index).then(() => {
             const newCard = this.cardBuffer[index];
             if (newCard && newCard.playerInstance) {
-                if (typeof newCard.playerInstance.seekTo === 'function') {
+                // Only seek to start if the player has already been used (state !== -1 unstarted)
+                const state = typeof newCard.playerInstance.getPlayerState === 'function'
+                    ? newCard.playerInstance.getPlayerState()
+                    : -1;
+                if (state !== -1 && typeof newCard.playerInstance.seekTo === 'function') {
                     newCard.playerInstance.seekTo(0);
                 }
                 videoPlayer.play(newCard.playerInstance);
@@ -220,14 +270,16 @@ export const feedManager = {
             }
         });
 
+        // Pre-load the next two cards so their iframes are ready when the user swipes
         this.createPlayerIfNeeded(index + 1).then(() => {
             const nextCard = this.cardBuffer[index + 1];
             if (nextCard && nextCard.playerInstance) videoPlayer.pause(nextCard.playerInstance);
         });
+        this.createPlayerIfNeeded(index + 2); // silently pre-buffer, no action needed
 
-        // Destroy players outside the window
+        // Destroy players outside the window (keep N-1 … N+2, destroy N-2 and N+3)
         this.destroyPlayerIfExists(index - 2);
-        this.destroyPlayerIfExists(index + 2);
+        this.destroyPlayerIfExists(index + 3);
 
         // Trigger preload to guarantee N+8
         this.preloadCards(this.currentIndex);
