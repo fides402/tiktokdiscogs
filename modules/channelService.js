@@ -224,7 +224,8 @@ export const channelService = {
         };
     },
 
-    clearSession() {
-        seenVideos.clear();
-    },
+    // seenVideos is intentionally NOT cleared here: same reason as discogsService.
+    // Keeping it persistent across back-and-forth navigations prevents the same
+    // videos from cycling back immediately. The set auto-rotates at 2 000 entries.
+    clearSession() {},
 };
