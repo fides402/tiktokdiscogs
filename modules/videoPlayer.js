@@ -37,11 +37,19 @@ export const videoPlayer = {
         }
 
         return new Promise((resolve) => {
-            new window.YT.Player(playerId, {
+            let player;
+            // Safety net: if onReady never fires (e.g. network stall), unblock after 8s
+            const timeoutId = setTimeout(() => {
+                console.warn(`YT onReady timeout for ${videoId || playlistId}`);
+                resolve(player || null);
+            }, 8000);
+
+            player = new window.YT.Player(playerId, {
                 videoId: videoId || undefined,
                 playerVars,
                 events: {
                     onReady: (event) => {
+                        clearTimeout(timeoutId);
                         resolve(event.target);
                     },
                     onStateChange: (event) => {

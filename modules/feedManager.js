@@ -77,7 +77,8 @@ export const feedManager = {
                 album: null,
                 videoId: null,
                 domElement: null,
-                playerInstance: null
+                playerInstance: null,
+                _creatingPromise: null
             });
 
             if (i === this.currentIndex || i === this.currentIndex + 1) {
@@ -172,9 +173,11 @@ export const feedManager = {
         this.container.appendChild(el);
         this.observer.observe(el);
 
-        // Start creating the YT player immediately so the iframe has time to load
-        // before the user scrolls to this card (cards are rendered 8 slots ahead).
-        this.createPlayerIfNeeded(index);
+        // Pre-create player only for cards close to current position to avoid
+        // saturating the network with 8 concurrent iframe loads.
+        if (Math.abs(index - this.currentIndex) <= 1) {
+            this.createPlayerIfNeeded(index);
+        }
 
         // Play immediately if this is the active index
         if (index === this.currentIndex) {
@@ -186,11 +189,19 @@ export const feedManager = {
         if (index < 0 || index >= this.cardBuffer.length) return;
         const card = this.cardBuffer[index];
         if (!card || !card.domElement || card.state !== 'ready') return;
+        if (card.playerInstance) return;
 
-        if (!card.playerInstance) {
+        // Singleton: if a creation is already in flight, await that same promise
+        // instead of spawning a second player on top of the first.
+        if (!card._creatingPromise) {
             const playlistId = card.album ? card.album.youtubePlaylistId : null;
-            card.playerInstance = await videoPlayer.createPlayer(card.domElement, card.videoId, playlistId);
+            card._creatingPromise = videoPlayer.createPlayer(card.domElement, card.videoId, playlistId)
+                .then(player => {
+                    card.playerInstance = player;
+                    card._creatingPromise = null;
+                });
         }
+        return card._creatingPromise;
     },
 
     destroyPlayerIfExists(index) {
@@ -200,6 +211,7 @@ export const feedManager = {
 
         videoPlayer.destroyPlayer(card.playerInstance);
         card.playerInstance = null;
+        card._creatingPromise = null;
 
         // Ensure the iframe is actually gone and container is ready for next time
         const container = card.domElement.querySelector('.yt-player-container');
