@@ -28,9 +28,11 @@ export const dataBuffer = {
 
     async runDiscogsLoop() {
         while (this.isRunning) {
+            // We must pass fetchDetails = true to obtain the release.videos from Discogs,
+            // which saves us from doing a 100-quota-unit YouTube text search for every single card.
             if (this.albumQueue.length < this.TARGET_ALBUM_QUEUE) {
                 try {
-                    const album = await discogsService.fetchRandomRelease(this.criteria);
+                    const album = await discogsService.fetchRandomRelease(this.criteria, true);
                     if (album) {
                         this.albumQueue.push(album);
                     }
