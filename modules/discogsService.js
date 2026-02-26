@@ -14,6 +14,10 @@ async function rateLimitedFetch(url, options) {
         await new Promise(resolve => setTimeout(resolve, 400 - elapsed));
     }
     lastDiscogsCall = Date.now();
+
+    // Prevent browser from caching repeated random parameters across sessions
+    options.cache = 'no-store';
+
     return fetch(url, options);
 }
 
@@ -26,38 +30,49 @@ export const discogsService = {
         // Build query params
         const params = new URLSearchParams({
             type: "release",
-            per_page: 100,
-            page: 1  // Always start with page 1 to discover pagination limits
+            format: "album", // Match rndmsound3
+            per_page: 1,     // Match rndmsound3 - fetch only 1 item per API call for absolute randomness
+            page: 1
         });
 
         if (criteria.genre) params.append("genre", criteria.genre);
         if (criteria.style) params.append("style", criteria.style);
-        if (criteria.year) params.append("year", criteria.year);
+
+        // Handle decade randomly like rndmsound3, or pick a fully random year if not provided
+        if (criteria.year) {
+            const decadeBase = parseInt(criteria.year, 10);
+            const randomYear = decadeBase + Math.floor(Math.random() * 10);
+            params.append("year", randomYear.toString());
+        } else {
+            // Force a random year to scatter results across the database and bypass the 10k limit
+            const randomYear = 1960 + Math.floor(Math.random() * 64); // 1960 to 2023
+            params.append("year", randomYear.toString());
+        }
+
         if (criteria.country) params.append("country", criteria.country);
+
+        // Mix up sorting to shuffle identical blocks
+        const sorts = ["year", "title", "format"];
+        params.append("sort", sorts[Math.floor(Math.random() * sorts.length)]);
+        params.append("sort_order", Math.random() > 0.5 ? "asc" : "desc");
 
         const headers = {
             'Authorization': `Discogs token=${CONFIG.DISCOGS_TOKEN}`,
             'User-Agent': "AntiGravityApp/1.0"
         };
 
-        const criteriaKey = JSON.stringify(criteria);
+        const criteriaKey = JSON.stringify(criteria) + "_" + params.get("year") + "_" + params.get("sort") + "_" + params.get("sort_order");
+        const maxRetries = 5;
 
-        // Serve from memory pool immediately if we have cached releases
-        if (criteriaReleasePools[criteriaKey] && criteriaReleasePools[criteriaKey].length > 0) {
-            const randomReleaseSummary = criteriaReleasePools[criteriaKey].pop();
-            return this.formatReleaseSummary(randomReleaseSummary, criteria, fetchDetails);
-        }
-
-        const maxRetries = 2;
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             try {
-                let totalPages = totalPagesCache[criteriaKey];
+                let maxItems = totalPagesCache[criteriaKey];
                 let data = null;
 
-                if (!totalPages) {
+                if (!maxItems) {
                     if (!pendingPageProbes[criteriaKey]) {
                         pendingPageProbes[criteriaKey] = (async () => {
-                            // Step 1: Probe for total pages to ensure we don't request out of bounds
+                            // Step 1: Probe for total items to ensure we don't request out of bounds
                             const initialSearchUrl = `${CONFIG.DISCOGS_BASE_URL}/database/search?${params.toString()}`;
                             let response = await rateLimitedFetch(initialSearchUrl, { headers });
 
@@ -74,22 +89,23 @@ export const discogsService = {
                                 throw error;
                             }
 
-                            totalPagesCache[criteriaKey] = Math.min(resData.pagination.pages, 200);
+                            // Discogs caps at 10,000 items
+                            totalPagesCache[criteriaKey] = Math.min(resData.pagination.items, 10000);
                             return resData;
                         })();
                     }
 
                     try {
                         data = await pendingPageProbes[criteriaKey];
-                        totalPages = totalPagesCache[criteriaKey];
+                        maxItems = totalPagesCache[criteriaKey];
                     } catch (err) {
                         delete pendingPageProbes[criteriaKey];
                         throw err;
                     }
                 }
 
-                // Step 2: Pick a random page within the actual bounds
-                const randomPage = Math.floor(Math.random() * totalPages) + 1;
+                // Step 2: Pick a random page within the actual bounds (since per_page=1, page = index)
+                const randomPage = Math.floor(Math.random() * maxItems) + 1;
 
                 if (randomPage > 1 || !data) {
                     params.set("page", randomPage);
@@ -97,50 +113,30 @@ export const discogsService = {
                     let response = await rateLimitedFetch(randomSearchUrl, { headers });
 
                     if (!response.ok) {
-                        if (response.status === 404 && data) {
-                            // Fallback to cached data if possible
-                            console.warn(`Page ${randomPage} not found, falling back to data`);
-                        } else if (response.status === 429) {
-                            throw new Error('TOO_MANY_REQUESTS');
-                        } else {
-                            throw new Error(`Discogs API Error on random page: ${response.status}`);
-                        }
-                    } else {
-                        data = await response.json();
+                        if (response.status === 429) throw new Error('TOO_MANY_REQUESTS');
+                        throw new Error(`Discogs API Error on random page: ${response.status}`);
                     }
+                    data = await response.json();
                 }
 
-                // Safety check again
+                // Safety check
                 if (!data.results || data.results.length === 0) {
                     throw new Error("No results found on chosen page");
                 }
 
-                // Filter out recently seen releases
-                let unseenResults = data.results.filter(r => !seenReleases.has(r.id));
+                const randomReleaseSummary = data.results[0];
 
-                // If by some extreme chance all 50 items on this page were seen, fallback to any
-                if (unseenResults.length === 0) {
-                    unseenResults = data.results;
+                // If we've seen this exact one recently, skip and go to next attempt
+                if (seenReleases.has(randomReleaseSummary.id)) {
+                    continue;
                 }
 
-                // Shuffle the unseen results to ensure randomness in the pool
-                for (let i = unseenResults.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [unseenResults[i], unseenResults[j]] = [unseenResults[j], unseenResults[i]];
+                // Add to seen Set
+                seenReleases.add(randomReleaseSummary.id);
+                if (seenReleases.size > 2000) {
+                    const iterator = seenReleases.values();
+                    seenReleases.delete(iterator.next().value); // Remove oldest
                 }
-
-                // Add all fetched releases to the seen Set immediately
-                unseenResults.forEach(r => {
-                    seenReleases.add(r.id);
-                    if (seenReleases.size > 2000) {
-                        const iterator = seenReleases.values();
-                        seenReleases.delete(iterator.next().value); // Remove oldest
-                    }
-                });
-
-                // Pick one release to return now, put the rest in the pool
-                const randomReleaseSummary = unseenResults.pop();
-                criteriaReleasePools[criteriaKey] = unseenResults;
 
                 return this.formatReleaseSummary(randomReleaseSummary, criteria, fetchDetails);
 
@@ -151,8 +147,8 @@ export const discogsService = {
 
                 // Exponential backoff
                 const isRateLimit = (error.message === 'TOO_MANY_REQUESTS' || (error.message && error.message.includes('429')));
-                const baseDelay = isRateLimit ? 2500 : 500;
-                const backoff = Math.min(baseDelay * Math.pow(1.5, attempt), 10000);
+                const baseDelay = isRateLimit ? 1500 : 500;
+                const backoff = Math.min(baseDelay * Math.pow(1.5, attempt), 5000);
 
                 if (isRateLimit) {
                     console.warn(`Discogs Rate Limit hit, waiting ${backoff}ms...`);

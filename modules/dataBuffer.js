@@ -59,25 +59,20 @@ export const dataBuffer = {
                 const album = this.albumQueue.shift();
 
                 try {
-                    let videoId = await youtubeService.searchVideo(album.artist, album.title, album.youtubeVideoIds);
-
-                    if (!videoId && !album.youtubePlaylistId && (!album.youtubeVideoIds || album.youtubeVideoIds.length === 0)) {
-                        try {
-                            const fetchedPlaylistId = await youtubeService.searchPlaylist(album.artist, album.title);
-                            if (fetchedPlaylistId) {
-                                album.youtubePlaylistId = fetchedPlaylistId;
-                            }
-                        } catch (e) {
-                            console.warn("YouTube playlist search failed", e);
-                        }
+                    // STRICT FAST-PATH: If Discogs provides YouTube IDs, use ALL of them to build a playlist.
+                    // If not, instantly discard the album and do not hammer the YouTube search API.
+                    if (album.youtubeVideoIds && album.youtubeVideoIds.length > 1) {
+                        // Has multiple videos -> becomes a playlist!
+                        this.readyQueue.push({ album, videoId: album.youtubeVideoIds });
+                    } else if (album.youtubeVideoIds && album.youtubeVideoIds.length === 1) {
+                        // Just 1 video. RndmSound3 plays it too, so we push it.
+                        this.readyQueue.push({ album, videoId: album.youtubeVideoIds });
+                    } else if (album.youtubePlaylistId) {
+                        this.readyQueue.push({ album, videoId: album.youtubePlaylistId });
                     }
-
-                    // Push valid or empty video to keep feed alive
-                    this.readyQueue.push({ album, videoId });
+                    // By doing nothing else, albums without videos are immediately skipped instantly.
                 } catch (err) {
                     console.error("YouTube pipeline error:", err);
-                    // Push the album anyway to prevent feed from hanging endlessly
-                    this.readyQueue.push({ album, videoId: null });
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
 
