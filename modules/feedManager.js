@@ -210,7 +210,14 @@ export const feedManager = {
         // instead of spawning a second player on top of the first.
         if (!card._creatingPromise) {
             const playlistId = card.album ? card.album.youtubePlaylistId : null;
-            card._creatingPromise = videoPlayer.createPlayer(card.domElement, card.videoId, playlistId)
+            // Only navigate to the next card when THIS card is still the active one.
+            // Pre-buffered players (index ≠ currentIndex) must not trigger navigation.
+            const onEnded = () => {
+                if (this.currentIndex === index) {
+                    document.dispatchEvent(new CustomEvent('videoEnded'));
+                }
+            };
+            card._creatingPromise = videoPlayer.createPlayer(card.domElement, card.videoId, playlistId, onEnded)
                 .then(player => {
                     card.playerInstance = player;
                     card._creatingPromise = null;
@@ -255,11 +262,16 @@ export const feedManager = {
         this.createPlayerIfNeeded(index).then(() => {
             const newCard = this.cardBuffer[index];
             if (newCard && newCard.playerInstance) {
-                // Only seek to start if the player has already been used (state !== -1 unstarted)
+                // Seek to start only when the video has actually progressed (e.g. the user
+                // revisits a card they already watched). Pre-buffered cards sit at ~0 s and
+                // must NOT be seeked — it would interrupt their buffer and cause a reload.
                 const state = typeof newCard.playerInstance.getPlayerState === 'function'
                     ? newCard.playerInstance.getPlayerState()
                     : -1;
-                if (state !== -1 && typeof newCard.playerInstance.seekTo === 'function') {
+                const currentTime = typeof newCard.playerInstance.getCurrentTime === 'function'
+                    ? newCard.playerInstance.getCurrentTime()
+                    : 0;
+                if (state !== -1 && currentTime > 2 && typeof newCard.playerInstance.seekTo === 'function') {
                     newCard.playerInstance.seekTo(0);
                 }
                 videoPlayer.play(newCard.playerInstance);
@@ -270,16 +282,17 @@ export const feedManager = {
             }
         });
 
-        // Pre-load the next two cards so their iframes are ready when the user swipes
+        // Pre-load the next three cards so their iframes are ready when the user swipes
         this.createPlayerIfNeeded(index + 1).then(() => {
             const nextCard = this.cardBuffer[index + 1];
             if (nextCard && nextCard.playerInstance) videoPlayer.pause(nextCard.playerInstance);
         });
-        this.createPlayerIfNeeded(index + 2); // silently pre-buffer, no action needed
+        this.createPlayerIfNeeded(index + 2); // silently pre-buffer
+        this.createPlayerIfNeeded(index + 3); // extra pre-buffer for fast swipers
 
-        // Destroy players outside the window (keep N-1 … N+2, destroy N-2 and N+3)
+        // Destroy players outside the window (keep N-1 … N+3, destroy N-2 and N+4)
         this.destroyPlayerIfExists(index - 2);
-        this.destroyPlayerIfExists(index + 3);
+        this.destroyPlayerIfExists(index + 4);
 
         // Trigger preload to guarantee N+8
         this.preloadCards(this.currentIndex);
