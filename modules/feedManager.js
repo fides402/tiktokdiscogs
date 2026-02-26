@@ -162,6 +162,10 @@ export const feedManager = {
         this.container.appendChild(el);
         this.observer.observe(el);
 
+        // Start creating the YT player immediately so the iframe has time to load
+        // before the user scrolls to this card (cards are rendered 8 slots ahead).
+        this.createPlayerIfNeeded(index);
+
         // Play immediately if this is the active index
         if (index === this.currentIndex) {
             this.handleCardVisible(index);
@@ -205,7 +209,7 @@ export const feedManager = {
 
         this.currentIndex = index;
 
-        // Manage rolling player window: max 3 players active
+        // Rolling player window: keep N-1, N, N+1, N+2 alive so videos buffer ahead of time
         this.createPlayerIfNeeded(index - 1).then(() => {
             const prevCard = this.cardBuffer[index - 1];
             if (prevCard && prevCard.playerInstance) videoPlayer.pause(prevCard.playerInstance);
@@ -214,7 +218,11 @@ export const feedManager = {
         this.createPlayerIfNeeded(index).then(() => {
             const newCard = this.cardBuffer[index];
             if (newCard && newCard.playerInstance) {
-                if (typeof newCard.playerInstance.seekTo === 'function') {
+                // Only seek to start if the player has already been used (state !== -1 unstarted)
+                const state = typeof newCard.playerInstance.getPlayerState === 'function'
+                    ? newCard.playerInstance.getPlayerState()
+                    : -1;
+                if (state !== -1 && typeof newCard.playerInstance.seekTo === 'function') {
                     newCard.playerInstance.seekTo(0);
                 }
                 videoPlayer.play(newCard.playerInstance);
@@ -225,14 +233,16 @@ export const feedManager = {
             }
         });
 
+        // Pre-load the next two cards so their iframes are ready when the user swipes
         this.createPlayerIfNeeded(index + 1).then(() => {
             const nextCard = this.cardBuffer[index + 1];
             if (nextCard && nextCard.playerInstance) videoPlayer.pause(nextCard.playerInstance);
         });
+        this.createPlayerIfNeeded(index + 2); // silently pre-buffer, no action needed
 
-        // Destroy players outside the window
+        // Destroy players outside the window (keep N-1 … N+2, destroy N-2 and N+3)
         this.destroyPlayerIfExists(index - 2);
-        this.destroyPlayerIfExists(index + 2);
+        this.destroyPlayerIfExists(index + 3);
 
         // Trigger preload to guarantee N+8
         this.preloadCards(this.currentIndex);

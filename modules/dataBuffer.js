@@ -14,6 +14,9 @@ export const dataBuffer = {
         this._generation++;
         const gen = this._generation;
 
+        // Reset Discogs caches so every new exploration starts with fresh, unpredictable results
+        discogsService.clearSession();
+
         this.criteria = criteria;
         this.albumQueue = [];
         this.readyQueue = [];

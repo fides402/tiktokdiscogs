@@ -270,5 +270,13 @@ export const discogsService = {
             youtubeVideoIds,
             trackList
         };
+    },
+
+    // Call at the start of each new exploration session to guarantee fresh, varied results.
+    // criteriaReleasePools: prevents stale cached items from reappearing across sessions.
+    // seenReleases: prevents the same 2000-item window from cycling back to already-seen albums.
+    clearSession() {
+        seenReleases.clear();
+        Object.keys(criteriaReleasePools).forEach(k => delete criteriaReleasePools[k]);
     }
 };
