@@ -100,10 +100,16 @@ export const videoPlayer = {
         // If readyState is correct, play
         if (typeof playerInstance.playVideo === 'function') {
             playerInstance.playVideo();
-            // Fallback for YouTube IFrame bug where playVideo is ignored right after onReady
+            // Fallback for YouTube IFrame bug where playVideo is ignored right after onReady.
+            // Only retry if stuck in UNSTARTED (-1) or BUFFERING (3).
+            // Do NOT retry PAUSED (2): that state means the card was intentionally paused
+            // (e.g. user scrolled away), and re-starting it would cause audio to overlap.
             setTimeout(() => {
-                if (typeof playerInstance.getPlayerState === 'function' && playerInstance.getPlayerState() !== window.YT.PlayerState.PLAYING) {
-                    playerInstance.playVideo();
+                if (typeof playerInstance.getPlayerState === 'function') {
+                    const state = playerInstance.getPlayerState();
+                    if (state === -1 || state === 3) {
+                        playerInstance.playVideo();
+                    }
                 }
             }, 300);
         } else if (playerInstance.addEventListener) {

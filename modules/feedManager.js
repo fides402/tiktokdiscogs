@@ -262,6 +262,9 @@ export const feedManager = {
         });
 
         this.createPlayerIfNeeded(index).then(() => {
+            // Guard: if the user scrolled past this card before the player was ready,
+            // do NOT unmute/play it — it would cause audio to overlap with the new card.
+            if (this.currentIndex !== index) return;
             const newCard = this.cardBuffer[index];
             if (newCard && newCard.playerInstance) {
                 // Only restart from the beginning if the user has already watched this card

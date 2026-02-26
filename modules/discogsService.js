@@ -261,11 +261,13 @@ export const discogsService = {
         };
     },
 
-    // Call at the start of each new exploration session to guarantee fresh, varied results.
-    // criteriaReleasePools: prevents stale cached items from reappearing across sessions.
-    // seenReleases: prevents the same 2000-item window from cycling back to already-seen albums.
+    // Call at the start of each new exploration session to reset per-session caches.
+    // seenReleases is intentionally NOT cleared here: keeping it persistent across
+    // back-and-forth navigations prevents the same albums from cycling back immediately
+    // after the user returns to the category screen. The set auto-rotates at 2000 entries.
     clearSession() {
-        seenReleases.clear();
         Object.keys(criteriaReleasePools).forEach(k => delete criteriaReleasePools[k]);
+        Object.keys(totalPagesCache).forEach(k => delete totalPagesCache[k]);
+        Object.keys(pendingPageProbes).forEach(k => delete pendingPageProbes[k]);
     }
 };
