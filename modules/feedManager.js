@@ -86,7 +86,8 @@ export const feedManager = {
                 videoId: null,
                 domElement: null,
                 playerInstance: null,
-                _creatingPromise: null
+                _creatingPromise: null,
+                wasActive: false
             });
 
             if (i === this.currentIndex || i === this.currentIndex + 1) {
@@ -247,13 +248,14 @@ export const feedManager = {
         if (this.currentIndex === index && !this.isNavigating && existingCard && existingCard.playerInstance) return;
 
         const oldCard = this.cardBuffer[this.currentIndex];
-        if (oldCard && oldCard.playerInstance) {
-            videoPlayer.pause(oldCard.playerInstance);
+        if (oldCard) {
+            oldCard.wasActive = true; // remember this card was watched so we can restart it on revisit
+            if (oldCard.playerInstance) videoPlayer.pause(oldCard.playerInstance);
         }
 
         this.currentIndex = index;
 
-        // Rolling player window: keep N-1, N, N+1, N+2 alive so videos buffer ahead of time
+        // Rolling player window: keep N-1, N, N+1, N+2, N+3 alive so videos buffer ahead of time
         this.createPlayerIfNeeded(index - 1).then(() => {
             const prevCard = this.cardBuffer[index - 1];
             if (prevCard && prevCard.playerInstance) videoPlayer.pause(prevCard.playerInstance);
@@ -262,16 +264,13 @@ export const feedManager = {
         this.createPlayerIfNeeded(index).then(() => {
             const newCard = this.cardBuffer[index];
             if (newCard && newCard.playerInstance) {
-                // Seek to start only when the video has actually progressed (e.g. the user
-                // revisits a card they already watched). Pre-buffered cards sit at ~0 s and
-                // must NOT be seeked — it would interrupt their buffer and cause a reload.
-                const state = typeof newCard.playerInstance.getPlayerState === 'function'
-                    ? newCard.playerInstance.getPlayerState()
-                    : -1;
+                // Only restart from the beginning if the user has already watched this card
+                // (wasActive=true) and it has advanced past 2 s. Pre-buffered cards play muted
+                // in the background and must NOT be seeked — it would interrupt their buffer.
                 const currentTime = typeof newCard.playerInstance.getCurrentTime === 'function'
                     ? newCard.playerInstance.getCurrentTime()
                     : 0;
-                if (state !== -1 && currentTime > 2 && typeof newCard.playerInstance.seekTo === 'function') {
+                if (newCard.wasActive && currentTime > 2 && typeof newCard.playerInstance.seekTo === 'function') {
                     newCard.playerInstance.seekTo(0);
                 }
                 videoPlayer.play(newCard.playerInstance);
@@ -282,13 +281,11 @@ export const feedManager = {
             }
         });
 
-        // Pre-load the next three cards so their iframes are ready when the user swipes
-        this.createPlayerIfNeeded(index + 1).then(() => {
-            const nextCard = this.cardBuffer[index + 1];
-            if (nextCard && nextCard.playerInstance) videoPlayer.pause(nextCard.playerInstance);
-        });
-        this.createPlayerIfNeeded(index + 2); // silently pre-buffer
-        this.createPlayerIfNeeded(index + 3); // extra pre-buffer for fast swipers
+        // Pre-buffer the next three cards: let them play muted so playback is instant on swipe.
+        // Do NOT pause N+1 — pausing stops buffering on mobile, causing the reload delay.
+        this.createPlayerIfNeeded(index + 1); // plays muted → instant unmute on swipe
+        this.createPlayerIfNeeded(index + 2);
+        this.createPlayerIfNeeded(index + 3);
 
         // Destroy players outside the window (keep N-1 … N+3, destroy N-2 and N+4)
         this.destroyPlayerIfExists(index - 2);
