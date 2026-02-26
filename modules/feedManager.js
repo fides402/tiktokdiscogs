@@ -39,6 +39,16 @@ export const feedManager = {
             }
         });
 
+        // Bluetooth headphone next/prev track buttons via Media Session API
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.setActionHandler('nexttrack', () => {
+                this.navigateTo(this.currentIndex + 1);
+            });
+            navigator.mediaSession.setActionHandler('previoustrack', () => {
+                this.navigateTo(this.currentIndex - 1);
+            });
+        }
+
         // Swipe down/up handling could be handled implicitly by scroll-snap,
         // but the intersection observer catches the active element.
 
