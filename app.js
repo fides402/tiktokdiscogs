@@ -7,8 +7,9 @@ import { dataBuffer } from './modules/dataBuffer.js';
 let activeCriteria = null;
 
 async function init() {
-    await window.ytApiReady;
-
+    // Do NOT await ytApiReady here — show the category screen immediately.
+    // videoPlayer.createPlayer() already awaits ytApiReady internally, so
+    // players are created correctly once the API loads, without blocking the UI.
     const categoryScreen = document.getElementById('category-screen');
     categorySelector.init(categoryScreen);
 
