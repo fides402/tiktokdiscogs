@@ -33,7 +33,8 @@ export const dataBuffer = {
             if (this.albumQueue.length < this.TARGET_ALBUM_QUEUE) {
                 try {
                     const album = await discogsService.fetchRandomRelease(this.criteria, true);
-                    if (album) {
+                    // Only queue albums that have at least one YouTube video linked on Discogs
+                    if (album && album.youtubeVideoIds && album.youtubeVideoIds.length > 0) {
                         this.albumQueue.push(album);
                     }
                 } catch (err) {
@@ -59,20 +60,9 @@ export const dataBuffer = {
                 const album = this.albumQueue.shift();
 
                 try {
-                    let videoId = await youtubeService.searchVideo(album.artist, album.title, album.youtubeVideoIds);
+                    // All albums in queue have youtubeVideoIds from Discogs, so this returns immediately
+                    const videoId = await youtubeService.searchVideo(album.artist, album.title, album.youtubeVideoIds);
 
-                    if (!videoId && !album.youtubePlaylistId && (!album.youtubeVideoIds || album.youtubeVideoIds.length === 0)) {
-                        try {
-                            const fetchedPlaylistId = await youtubeService.searchPlaylist(album.artist, album.title);
-                            if (fetchedPlaylistId) {
-                                album.youtubePlaylistId = fetchedPlaylistId;
-                            }
-                        } catch (e) {
-                            console.warn("YouTube playlist search failed", e);
-                        }
-                    }
-
-                    // Push valid or empty video to keep feed alive
                     this.readyQueue.push({ album, videoId });
                 } catch (err) {
                     console.error("YouTube pipeline error:", err);

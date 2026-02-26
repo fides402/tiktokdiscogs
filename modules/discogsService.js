@@ -138,9 +138,10 @@ export const discogsService = {
                     }
                 });
 
-                // Pick one release to return now, put the rest in the pool
+                // Pick one release to return now, keep only a small subset in pool
+                // to force frequent random page fetches and ensure variety
                 const randomReleaseSummary = unseenResults.pop();
-                criteriaReleasePools[criteriaKey] = unseenResults;
+                criteriaReleasePools[criteriaKey] = unseenResults.slice(0, 8);
 
                 return this.formatReleaseSummary(randomReleaseSummary, criteria, fetchDetails);
 

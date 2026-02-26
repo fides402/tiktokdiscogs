@@ -20,14 +20,14 @@ export const feedManager = {
         // Set up intersection observer to detect current card
         this.observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
-                if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
                     const index = parseInt(entry.target.dataset.index, 10);
                     this.handleCardVisible(index);
                 }
             });
         }, {
             root: this.container,
-            threshold: [0.5]
+            threshold: [0, 0.25, 0.5, 0.75, 1.0]
         });
 
         // Keyboard navigation
@@ -191,7 +191,10 @@ export const feedManager = {
     },
 
     async handleCardVisible(index) {
-        if (this.currentIndex === index && !this.isNavigating) return;
+        // Only skip if we're already on this card AND the player already exists
+        // (avoids blocking initial play when currentIndex === index but player is not yet created)
+        const existingCard = this.cardBuffer[index];
+        if (this.currentIndex === index && !this.isNavigating && existingCard && existingCard.playerInstance) return;
 
         const oldCard = this.cardBuffer[this.currentIndex];
         if (oldCard && oldCard.playerInstance) {
