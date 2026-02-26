@@ -21,7 +21,7 @@ export const videoPlayer = {
         await window.ytApiReady;
 
         const playerVars = {
-            autoplay: 0,
+            autoplay: 1,
             controls: 0,
             modestbranding: 1,
             playsinline: 1,
@@ -36,31 +36,28 @@ export const videoPlayer = {
             playerVars.listType = 'playlist';
         }
 
-        return new window.YT.Player(playerId, {
-            videoId: videoId || undefined,
-            playerVars,
-            events: {
-                onStateChange: (event) => {
-                    if (event.data === window.YT.PlayerState.ENDED) {
-                        const endedEvent = new CustomEvent('videoEnded');
-                        document.dispatchEvent(endedEvent);
+        return new Promise((resolve) => {
+            new window.YT.Player(playerId, {
+                videoId: videoId || undefined,
+                playerVars,
+                events: {
+                    onReady: (event) => {
+                        resolve(event.target);
+                    },
+                    onStateChange: (event) => {
+                        if (event.data === window.YT.PlayerState.ENDED) {
+                            document.dispatchEvent(new CustomEvent('videoEnded'));
+                        }
                     }
                 }
-            }
+            });
         });
     },
 
     play(playerInstance) {
         if (!playerInstance) return;
-
-        // If readyState is correct, play
         if (typeof playerInstance.playVideo === 'function') {
             playerInstance.playVideo();
-        } else if (playerInstance.addEventListener) {
-            // Queue it up if not ready
-            playerInstance.addEventListener('onReady', () => {
-                playerInstance.playVideo();
-            });
         }
     },
 
