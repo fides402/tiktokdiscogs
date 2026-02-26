@@ -122,6 +122,12 @@ export const videoPlayer = {
 
     pause(playerInstance) {
         if (!playerInstance) return;
+        // Always mute before pausing: if the player somehow resumes (scroll glitch,
+        // IFrame timing), it won't produce audio until explicitly unmuted by the
+        // active-card logic in feedManager.handleCardVisible().
+        if (typeof playerInstance.mute === 'function') {
+            playerInstance.mute();
+        }
         if (typeof playerInstance.pauseVideo === 'function') {
             playerInstance.pauseVideo();
         }
