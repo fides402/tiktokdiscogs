@@ -1,33 +1,38 @@
 import { discogsService } from './discogsService.js';
-import { youtubeService } from './youtubeService.js';
 
 export const dataBuffer = {
     albumQueue: [],
     readyQueue: [],
     TARGET_ALBUM_QUEUE: 15,
-    TARGET_READY_QUEUE: 5, // Increased to 5 for better fluidity since 3 caused stuttering
+    TARGET_READY_QUEUE: 5,
     isRunning: false,
     criteria: null,
+    _generation: 0,
 
     startPipeline(criteria) {
+        // Increment generation to invalidate any loops from a previous pipeline
+        this._generation++;
+        const gen = this._generation;
+
         this.criteria = criteria;
         this.albumQueue = [];
         this.readyQueue = [];
         this.isRunning = true;
 
         // Loop 1: Discogs Queue (always keep ~15 albums ready)
-        this.runDiscogsLoop();
+        this.runDiscogsLoop(gen);
 
-        // Loop 2: YouTube Queue (always keep ~8 full videos ready)
-        this.runYoutubeLoop();
+        // Loop 2: YouTube Queue (always keep ~5 full items ready)
+        this.runYoutubeLoop(gen);
     },
 
     stopPipeline() {
         this.isRunning = false;
+        this._generation++; // Invalidate running loops immediately
     },
 
-    async runDiscogsLoop() {
-        while (this.isRunning) {
+    async runDiscogsLoop(gen) {
+        while (this.isRunning && this._generation === gen) {
             // We must pass fetchDetails = true to obtain the release.videos from Discogs,
             // which saves us from doing a 100-quota-unit YouTube text search for every single card.
             if (this.albumQueue.length < this.TARGET_ALBUM_QUEUE) {
@@ -55,8 +60,8 @@ export const dataBuffer = {
         }
     },
 
-    async runYoutubeLoop() {
-        while (this.isRunning) {
+    async runYoutubeLoop(gen) {
+        while (this.isRunning && this._generation === gen) {
             if (this.readyQueue.length < this.TARGET_READY_QUEUE && this.albumQueue.length > 0) {
                 // Take from album queue
                 const album = this.albumQueue.shift();

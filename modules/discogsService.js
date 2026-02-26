@@ -32,7 +32,11 @@ export const discogsService = {
 
         if (criteria.genre) params.append("genre", criteria.genre);
         if (criteria.style) params.append("style", criteria.style);
-        if (criteria.year) params.append("year", criteria.year);
+        if (criteria.year) {
+            // Convert decade start (e.g. "1980") to full range "1980-1989"
+            const y = parseInt(criteria.year, 10);
+            params.append("year", `${y}-${y + 9}`);
+        }
         if (criteria.country) params.append("country", criteria.country);
 
         const headers = {

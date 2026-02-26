@@ -1,5 +1,13 @@
 import { youtubeService } from './youtubeService.js';
 
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export const overlayUI = {
   createOverlay(album, videoId = null) {
     const overlay = document.createElement('div');
@@ -33,14 +41,14 @@ export const overlayUI = {
       playlistBtnText = 'NO PLAYLIST';
     }
 
-    const categoryName = album.category ? album.category.toUpperCase() : 'UNKNOWN';
+    const categoryName = escHtml(album.category ? album.category.toUpperCase() : 'UNKNOWN');
 
     overlay.innerHTML = `
       <div class="overlay-top">
         <span class="category-badge">${categoryName}</span>
-        <span class="artist-name">${album.artist}</span>
-        <span class="album-title">${album.title}</span>
-        <span class="album-year">${album.year}</span>
+        <span class="artist-name">${escHtml(album.artist)}</span>
+        <span class="album-title">${escHtml(album.title)}</span>
+        <span class="album-year">${escHtml(album.year)}</span>
       </div>
       <div class="overlay-bottom">
         <a href="${album.discogsUrl}" target="_blank" class="action-btn">

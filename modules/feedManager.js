@@ -85,7 +85,8 @@ export const feedManager = {
             // Asynchronously resolve this empty slot by asking the buffer
             (async (index) => {
                 const data = await this.fetchCallback(); // This will point to dataBuffer.consume()
-                if (data && data.album) {
+                // Guard: pipeline may have been reset while we were waiting
+                if (data && data.album && this.cardBuffer[index]) {
                     if (this.cardBuffer[index].domElement) {
                         this.cardBuffer[index].domElement.remove();
                     }
