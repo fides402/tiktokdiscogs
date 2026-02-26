@@ -210,7 +210,14 @@ export const feedManager = {
         // instead of spawning a second player on top of the first.
         if (!card._creatingPromise) {
             const playlistId = card.album ? card.album.youtubePlaylistId : null;
-            card._creatingPromise = videoPlayer.createPlayer(card.domElement, card.videoId, playlistId)
+            // Only navigate to the next card when THIS card is still the active one.
+            // Pre-buffered players (index ≠ currentIndex) must not trigger navigation.
+            const onEnded = () => {
+                if (this.currentIndex === index) {
+                    document.dispatchEvent(new CustomEvent('videoEnded'));
+                }
+            };
+            card._creatingPromise = videoPlayer.createPlayer(card.domElement, card.videoId, playlistId, onEnded)
                 .then(player => {
                     card.playerInstance = player;
                     card._creatingPromise = null;

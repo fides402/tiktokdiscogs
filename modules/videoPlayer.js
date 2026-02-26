@@ -1,5 +1,5 @@
 export const videoPlayer = {
-    async createPlayer(cardElement, videoId, playlistId = null) {
+    async createPlayer(cardElement, videoId, playlistId = null, onEnded = null) {
         if (!videoId && !playlistId) return null;
 
         // Ensure YT API is ready
@@ -71,21 +71,19 @@ export const videoPlayer = {
                     },
                     onStateChange: (event) => {
                         if (event.data === window.YT.PlayerState.ENDED) {
-                            // Check if this is a playlist and there are more videos
+                            // For playlists: only trigger end when the last video finishes
                             let isPlaylistFinished = true;
                             if (typeof player.getPlaylist === 'function' && typeof player.getPlaylistIndex === 'function') {
                                 const playlist = player.getPlaylist();
                                 if (playlist && playlist.length > 0) {
                                     const currentVidIndex = player.getPlaylistIndex();
-                                    // If we are not at the last video, don't trigger end
                                     if (currentVidIndex < playlist.length - 1) {
                                         isPlaylistFinished = false;
                                     }
                                 }
                             }
-
-                            if (isPlaylistFinished) {
-                                document.dispatchEvent(new CustomEvent('videoEnded'));
+                            if (isPlaylistFinished && onEnded) {
+                                onEnded();
                             }
                         }
                     }
