@@ -17,17 +17,25 @@ export const feedManager = {
         this.currentIndex = 0;
         this.isPreloading = false;
 
-        // Set up intersection observer to detect current card
+        // Set up intersection observer to detect current card.
+        // Use a single threshold and pick only the most-visible entry per batch
+        // to avoid calling handleCardVisible for the outgoing card during a scroll
+        // transition (which would restart the previous track).
         this.observer = new IntersectionObserver((entries) => {
+            let best = null;
             entries.forEach(entry => {
                 if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-                    const index = parseInt(entry.target.dataset.index, 10);
-                    this.handleCardVisible(index);
+                    if (!best || entry.intersectionRatio > best.intersectionRatio) {
+                        best = entry;
+                    }
                 }
             });
+            if (best) {
+                this.handleCardVisible(parseInt(best.target.dataset.index, 10));
+            }
         }, {
             root: this.container,
-            threshold: [0, 0.25, 0.5, 0.75, 1.0]
+            threshold: [0.5]
         });
 
         // Keyboard navigation
@@ -127,6 +135,13 @@ export const feedManager = {
         el.className = 'feed-card';
         el.dataset.index = index;
 
+        // Show album cover as background while the YT iframe is loading
+        if (album.coverUrl) {
+            el.style.backgroundImage = `url('${album.coverUrl}')`;
+            el.style.backgroundSize = 'cover';
+            el.style.backgroundPosition = 'center';
+        }
+
         // Ensure we have a container for the player
         const ytContainer = document.createElement('div');
         ytContainer.className = 'yt-player-container';
@@ -173,9 +188,9 @@ export const feedManager = {
         this.container.appendChild(el);
         this.observer.observe(el);
 
-        // Pre-create player only for cards close to current position to avoid
-        // saturating the network with 8 concurrent iframe loads.
-        if (Math.abs(index - this.currentIndex) <= 1) {
+        // Pre-create player for cards within 2 positions of the current card.
+        // The singleton _creatingPromise prevents double-creation on concurrent calls.
+        if (Math.abs(index - this.currentIndex) <= 2) {
             this.createPlayerIfNeeded(index);
         }
 
