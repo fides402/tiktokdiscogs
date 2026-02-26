@@ -173,7 +173,8 @@ export const feedManager = {
         if (!card || !card.domElement || card.state !== 'ready') return;
 
         if (!card.playerInstance) {
-            card.playerInstance = await videoPlayer.createPlayer(card.domElement, card.videoId);
+            const playlistId = card.album ? card.album.youtubePlaylistId : null;
+            card.playerInstance = await videoPlayer.createPlayer(card.domElement, card.videoId, playlistId);
         }
     },
 

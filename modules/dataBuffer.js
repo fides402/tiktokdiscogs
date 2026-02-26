@@ -33,8 +33,10 @@ export const dataBuffer = {
             if (this.albumQueue.length < this.TARGET_ALBUM_QUEUE) {
                 try {
                     const album = await discogsService.fetchRandomRelease(this.criteria, true);
-                    // Only queue albums that have at least one YouTube video linked on Discogs
-                    if (album && album.youtubeVideoIds && album.youtubeVideoIds.length > 0) {
+                    // Only queue albums that have at least one YouTube video or playlist linked on Discogs
+                    const hasVideo = album && album.youtubeVideoIds && album.youtubeVideoIds.length > 0;
+                    const hasPlaylist = album && album.youtubePlaylistId;
+                    if (hasVideo || hasPlaylist) {
                         this.albumQueue.push(album);
                     }
                 } catch (err) {
@@ -63,8 +65,8 @@ export const dataBuffer = {
                     // All albums in queue have youtubeVideoIds from Discogs, so this returns immediately
                     const videoId = await youtubeService.searchVideo(album.artist, album.title, album.youtubeVideoIds);
 
-                    // Only add to feed if we have a valid video ID
-                    if (videoId) {
+                    // Add to feed if we have a video ID or a playlist fallback
+                    if (videoId || album.youtubePlaylistId) {
                         this.readyQueue.push({ album, videoId });
                     }
                 } catch (err) {

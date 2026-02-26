@@ -222,16 +222,27 @@ export const discogsService = {
 
         if (release.videos && release.videos.length > 0) {
             for (const video of release.videos) {
-                if (video.uri && video.uri.includes("youtube.com")) {
-                    try {
+                if (!video.uri) continue;
+                try {
+                    if (video.uri.includes("youtu.be/")) {
+                        // Short URL: https://youtu.be/VIDEO_ID
+                        const vId = new URL(video.uri).pathname.slice(1).split('?')[0];
+                        if (vId) youtubeVideoIds.push(vId);
+                    } else if (video.uri.includes("youtube.com")) {
                         const tempUrl = new URL(video.uri);
                         const vId = tempUrl.searchParams.get("v");
                         if (vId) {
                             youtubeVideoIds.push(vId);
+                        } else {
+                            // Playlist URL without individual video (e.g. /playlist?list=...)
+                            const listId = tempUrl.searchParams.get("list");
+                            if (listId && !youtubePlaylistId) {
+                                youtubePlaylistId = listId;
+                            }
                         }
-                    } catch (e) {
-                        // Intentionally ignore URL parse errors
                     }
+                } catch (e) {
+                    // Intentionally ignore URL parse errors
                 }
             }
         }
